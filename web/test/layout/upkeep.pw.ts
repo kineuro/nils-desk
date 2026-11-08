@@ -12,6 +12,7 @@ async function shot(page: Page, name: string) {
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${name}-${test.info().project.name}.png` });
 }
 
+// UX round 5: people by name, so the rater is Rune (the pace door's name) and the maker Astrid (the desk's own name)
 // the close is followed over a few reads of the campaign, each a second and a half apart
 test.describe.configure({ timeout: 60_000 });
 
@@ -28,11 +29,19 @@ for (const vp of [
     await expect(page.locator(".mode-missing")).toHaveText(/^No gallery: it shows one axis at a time, and this campaign asks 2 \(body_part, body_region\)/);
     await expect(page.locator(".read-alone")).toContainText("2 open items are read one by one");
     await expect(page.locator(".read-alone").getByRole("button", { name: "Read all in batches" })).toBeVisible();
-    const held = page.locator(".campaign-items tbody tr").filter({ hasText: "with rune until" });
+    const held = page.locator(".campaign-items tbody tr").filter({ hasText: "with Rune until" });
     await expect(held).toHaveCount(1);
     await expect(held.getByRole("button", { name: "Release" })).toBeVisible();
-    await expect(page.locator(".campaign-items")).toContainText("lease ran out; free again for rune, no release needed");
-    await expect(page.locator("h2").filter({ hasText: "Pace" })).toContainText("a claim open over 5 min is a break, not reading");
+    await expect(page.locator(".campaign-items")).toContainText("lease ran out; free again for Rune, no release needed");
+    // UX round 5: the pace's caveat sits under the Details fold, closed; the Pace table keeps its heading plain
+    const details = page.locator(".campaign-details");
+    expect(await details.evaluate((d) => (d as HTMLDetailsElement).open)).toBe(false);
+    await details.locator("summary").click();
+    await expect(details.locator(".pace-caveat")).toContainText("a claim open over 5 min is a break, not reading");
+    await expect(page.locator("h2").filter({ hasText: "Pace" })).toHaveText("Pace");
+    // the one next action: the maker, who does not read it, closes it; the state as the head's border
+    await expect(page.locator(".campaign-head .button.next")).toHaveText("Close");
+    expect(await page.locator(".campaign-head").evaluate((e) => getComputedStyle(e).borderLeftWidth)).toBe("3px");
     await expect(page.locator("body")).not.toContainText(/held back|take the suggestion|earlier close/i);
     expect(await sideways(page)).toBeLessThanOrEqual(0);
     await shot(page, `upkeep-campaign-${vp.width}x${vp.height}`);
@@ -88,7 +97,7 @@ for (const vp of [
   test(`a close running seen on the page at ${vp.width} by ${vp.height}: how far, and no second close`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/upkeep.html?closing=1");
-    await expect(page.locator("p.said[role=status]")).toContainText("Closing (started by astrid): 2 written, 1 to go. The page follows it.");
+    await expect(page.locator("p.said[role=status]")).toContainText("Closing (started by Astrid): 2 written, 1 to go. The page follows it.");
     await expect(page.locator(".data-head").getByRole("button", { name: /Close|Run the close again/ })).toHaveCount(0);
     expect(await sideways(page)).toBeLessThanOrEqual(0);
     await shot(page, `upkeep-closing-page-${vp.width}x${vp.height}`);

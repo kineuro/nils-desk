@@ -723,3 +723,21 @@ dl.facts dd .raters-change { margin-left: 0.6rem; }
 dialog .closing { display: grid; gap: 0.4rem; }
 dialog .closed-result .refused-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 dialog .closed-result .refused-list li { overflow-wrap: anywhere; }
+
+/* a campaign's page as an app page (UX round 5, finding 7): the head's left border tells its state
+   (being read the brand's, closing the caution's, closed quiet), one next action, the facts under
+   a closed Details fold, each item's row framed by its state's colour */
+.campaign .campaign-head { padding-left: 0.875rem; border-left: 3px solid var(--n-brand-line); }
+.campaign.tone-caution .campaign-head { border-left-color: var(--n-caution-line); }
+.campaign.tone-neutral .campaign-head { border-left-color: var(--n-neutral-line); }
+.campaign .campaign-head .lede { overflow-wrap: anywhere; }
+.campaign-details > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.campaign-details[open] > summary { margin-bottom: 0.6rem; }
+.campaign-details > .values { margin-bottom: 0.6rem; }
+.campaign-details > .meta { margin: 0.4rem 0 0; }
+.campaign-items tr.item-row td:first-child { border-left: 3px solid var(--n-neutral-line); }
+.campaign-items tr.s-caution td:first-child { border-left-color: var(--n-caution-icon); }
+.campaign-items tr.s-ok td:first-child { border-left-color: var(--n-ok-icon); }
+.campaign-items tr.s-brand td:first-child { border-left-color: var(--n-brand-icon); }
+.campaign-items .item-name { overflow-wrap: anywhere; }
+.who[title] { cursor: help; }

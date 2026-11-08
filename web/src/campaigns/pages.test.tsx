@@ -28,6 +28,8 @@ const closed = closedCampaign as unknown as Campaign;
 const answers = (answersOpen as { answers: Answer[] }).answers;
 const none = () => undefined;
 const NOW = Date.parse("2026-09-24T10:00:00Z");
+/** The page's words without its markup, where a name sits in its own span. */
+const text = (html: string) => html.replace(/<[^>]+>/gu, "");
 
 describe("the campaigns, as cards on Review's first page", () => {
   const html = renderToStaticMarkup(<WorkBody caps={capsFor({ grants: RATER, principal: "alice@walk" })} summary={null} list={list} now={NOW} onMake={none} />);
@@ -78,12 +80,19 @@ describe("one campaign", () => {
   it("says the question, the source, who rates and adjudicates, and how well they agree", () => {
     const html = draw();
     expect(html).toContain("<h1>base-check</h1>");
-    expect(html).toContain('One axis: base · 11 values <span class="tag ok">open</span>');
+    // UX round 5: what it asks in a person's words, the engine's words, how many, who reads them; the state as a tag and the head's border
+    expect(html).toContain('<p class="lede">What is each scan&#x27;s base? · base · 11 values · 6 scans · anyone with work on Campaigns reads them <span class="tag ok">open</span></p>');
+    expect(html).toContain('<section class="data campaign tone-brand">');
+    // one next action: carol may read the open items
+    expect(html).toContain('<a class="button next" href="#review/campaigns/6/rate">Read the 3 left</a>');
+    // the facts under one closed fold
+    expect(html).toContain('<details class="campaign-details"><summary>Details</summary>');
+    expect(html).not.toContain("<details open");
     expect(html).toContain('<span class="k">items</span><span class="v">6</span>');
     expect(html).toContain('<span class="k">exact</span><span class="v">67%</span>');
     expect(html).toContain('<span class="v">0.40</span>');
     expect(html).toContain("<dt>raters</dt><dd>anyone with work on Campaigns</dd>");
-    expect(html).toContain("<dt>adjudicators</dt><dd>carol@walk</dd>");
+    expect(html).toContain('<dt>adjudicators</dt><dd><span><span class="who" title="carol@walk">carol</span></span></dd>');
     expect(html).toContain("<dt>adjudicated</dt><dd>on disagreement · exact</dd>");
     expect(html).toContain("<dt>closes into</dt><dd>decisions in force</dd>");
     expect(html).toContain("<dt>lease</dt><dd>15 min</dd>");
@@ -94,9 +103,9 @@ describe("one campaign", () => {
   it("offers Change beside the raters of an open campaign that names them, to its maker or a reviewer", () => {
     const named = { ...open, rater_policy: { raters: ["alice@walk", "bob@walk"], adjudicators: ["carol@walk"] } };
     const html = draw(capsFor({ grants: ADMIN }), named);
-    expect(html).toContain("<dt>raters</dt><dd>alice@walk, bob@walk<button");
+    expect(html).toContain('<dt>raters</dt><dd><span><span class="who" title="alice@walk">alice</span></span><span>, <span class="who" title="bob@walk">bob</span></span></dd>');
     expect(html).toContain('aria-label="Change the raters"');
-    expect(html).toContain(">Change</button>");
+    expect(html).toContain(">Change raters</button>");
     // its maker, with work on Campaigns, whatever else they hold
     expect(draw(capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "carol@walk" }), named)).toContain('aria-label="Change the raters"');
     // a reviewer who did not make it
@@ -141,21 +150,24 @@ describe("one campaign", () => {
     const html = draw();
     expect(html).toContain("all <b>6</b>");
     expect(html).toContain("to adjudicate <b>1</b>");
-    expect(html).toContain('<span class="tag caution">to adjudicate</span>');
-    expect(html).toContain('<span class="tag ok">agreed</span>');
-    expect(html).toMatch(/alice T1w<\/span><span class="answer-chip"[^>]*>bob T1w/u);
+    // UX round 5: the row's state as its border's colour, the word plain; each row named by its scan
+    expect(html).toContain('<tr class="item-row s-caution"><td class="num">3</td><td><span class="item-name" title="stack 3">scan 3 of the campaign</span>');
+    expect(html).toContain('<span class="item-state">to adjudicate</span>');
+    expect(html).toContain('<tr class="item-row s-ok">');
+    expect(html).not.toContain('class="tag caution">to adjudicate');
+    expect(text(html)).toContain("alice T1wbob T1w");
     const only = draw(undefined, open, answers, [], "needs_adjudication");
-    expect(only.match(/<tr>/gu)?.length).toBe(2);
-    expect(only).toContain("alice T1w");
-    expect(only).toContain("bob T2w");
+    expect(only.match(/<tr>|<tr class="item-row/gu)?.length).toBe(2);
+    expect(text(only)).toContain("alice T1w");
+    expect(text(only)).toContain("bob T2w");
   });
 
   it("lets a rater rate blind: counts, not the other raters' answers, until it closes", () => {
     const rater = draw(capsFor({ grants: RATER, principal: "alice@walk" }));
-    expect(rater).not.toContain("bob T2w");
+    expect(text(rater)).not.toContain("bob T2w");
     expect(rater).toContain('<td class="meta">2 answers</td>');
     expect(rater).toContain("Raters rate blind");
-    expect(draw(capsFor({ grants: RATER, principal: "carol@walk" }))).toContain("bob T2w");
+    expect(text(draw(capsFor({ grants: RATER, principal: "carol@walk" })))).toContain("bob T2w");
   });
 
   it("offers Close and Export with the grants, and says why not without", () => {
@@ -174,8 +186,15 @@ describe("one campaign", () => {
   it("shows a closed campaign's outcome, its decision and its label sets", () => {
     const html = draw(capsFor(), closed, null, [labelSets.label_sets[0] as unknown as LabelSet]);
     expect(html).toContain('<span class="tag">closed</span>');
-    expect(html).toContain("<dt>closed</dt><dd>carol@walk · 24 Sept 2026</dd>");
-    expect(html).toContain('<span class="tag brand">resolved</span>');
+    expect(html).toContain('<section class="data campaign tone-neutral">');
+    expect(html).toContain('<dt>closed</dt><dd><span class="who" title="carol@walk">carol</span> · 24 Sept 2026</dd>');
+    expect(html).toContain('<tr class="item-row s-brand">');
+    expect(html).toContain('<span class="item-state">resolved</span>');
+    // closed: no next action without the results door; with it, Results is the one; Export stays small
+    expect(html).not.toContain('class="button next"');
+    expect(html).toContain('<button type="button" class="button secondary small">Export</button>');
+    const withResults = draw(capsFor({ doors: [...DOORS, "GET /api/campaigns/{id}/results"] }), closed, null, []);
+    expect(withResults).toContain('<button type="button" class="button next">Results</button>');
     expect(html).toContain("T1w<span class=\"meta\"> · decision 1</span>");
     expect(html).toContain('<a href="#review/label-sets/1">probe-axis v1</a>');
     expect(html).not.toContain(">Close</button>");
@@ -227,7 +246,8 @@ describe("a check whose close refused an item", () => {
 
   it("shows the refused item as refused with the engine's reason, never as agreed and accepted", () => {
     const html = draw(check);
-    expect(html).toContain('<span class="tag caution">refused</span>');
+    expect(html).toContain('<tr class="item-row s-caution">');
+    expect(html).toContain('<span class="item-state">refused</span>');
     expect(html).toContain(`Not written: ${why}`);
     expect(html).not.toContain(">agreed</span>");
     expect(html).not.toMatch(/<td>accepted/u);

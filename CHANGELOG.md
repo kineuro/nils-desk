@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- A campaign's page is an app page, as Review's first page is: the head says in a person's words what the campaign asks and who reads it (`Is the scan like the pre or the post? · post_contrast · 36 scans · you read them`), its state is the head's border, and one next action is chosen from that state: `Read the 2 left` (or `Settle the 2` on an A/B campaign) where the person may read, `Settle the 3` where items wait for them as adjudicator, `Close` once nothing is left, `Run the close again` where a close stopped part way, and `Results` once it is closed; Export and Change raters are small beside it. People are named everywhere on the page, on the raters line, in the Pace table, in each answer and on an open item's lease, through the desk's people (`GET /desk/people`, read once a session), the person's own name and the pace door's; the sign-in subject is only a hover, cut to its first eight characters, and a subject the desk cannot name is "a rater" with those eight characters on hover, never a whole hash. Each item is named by its scan (the series description from the stack's header, where the person may read it and the campaign shows header text), else `scan 4 of the campaign` with the engine's words on hover; its state is the row's colour; its answers are value words (`like the post`, `can't tell`, the pack's label), and `null` is never shown. The facts (source, raters, adjudicators, how it is adjudicated, what it closes into, the lease, who made it, the agreement and the pace's caveat) sit under one closed Details fold; the state bar and the items' chips stay above it. A person found the page a fact sheet with the OIDC subject hash in place of every name and rows named `anchored:0`. The engine is unchanged (1.0.0-beta.10).
+
 ## [1.0.0-beta.8] - 2026-11-08
 
 The eighth desk beta is one page, from production use: Review opens on cards, as Data does, so a person who comes for what a model proposed sees it first and acts on it from the card. The engine is unchanged.

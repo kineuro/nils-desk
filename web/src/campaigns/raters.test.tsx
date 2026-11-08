@@ -192,7 +192,7 @@ describe("the campaign's page", () => {
     const e = doors(state, [warning]);
     act(() => root.render(<CampaignPage caps={caps()} id="6" />));
     await settle();
-    expect(host.textContent).toContain("alice@walk, bob@walk");
+    expect(host.textContent).toContain("alice, bob");
     click(button(host, "Change the raters"));
     await settle();
     const dialog = host.querySelector("dialog[open]")!;
@@ -206,7 +206,7 @@ describe("the campaign's page", () => {
     expect(e.of("GET", "/api/campaigns/6")).toHaveLength(2);
     expect(host.querySelector("dialog[open]")).toBeNull();
     expect(host.textContent).toContain("Added Erin Berg. Took off Bob Ek. Rating now: Alice Lund, Erin Berg.");
-    expect(host.textContent).toContain("alice@walk, erin@walk");
+    expect(host.textContent).toContain("alice, erin");
     expect(host.querySelector("p.warn")?.textContent).toBe(warning.why);
   });
 
