@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // Review round 1 (record 56 section 6.3): the questions as the engine says
-// them, read into one shape; the grid's keys and what Enter sends (one answer
-// for the page's scans, the scans set apart as exceptions taking the other
-// key's answer, a scan left for later); the list in plain words with its
-// counts and the ways out; the grid answering a page and opening the next;
+// them, read into one shape; the grid's state as the gallery's (UX round 6:
+// the first answer every scan's at open, a key for every scan, a click for
+// one, space sets one apart and it stays open, 0 the whole list once) and
+// what Enter sends (one answer for the page's scans, the ones set otherwise
+// as exceptions); the list in plain words with its counts and the ways out;
+// the grid's one bar and its tiles, answering a page and opening the next;
 // and the same keys under an open scan in the dataset viewer.
 
 import { act } from "react";
@@ -14,11 +16,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DoorError, type Json } from "../ask/client";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
-import { QuestionGrid, QuestionsPage } from "./Questions";
+import { KEYS_HELP, QuestionGrid, QuestionsPage } from "./Questions";
 import {
   answerBody,
   answeredOf,
   answeredWords,
+  apartOf,
   chooseKey,
   chooseNothing,
   chooseValue,
@@ -36,11 +39,12 @@ import {
   QUESTION_DOORS,
   refusedWords,
   ruleLine,
-  setApart,
   slots,
   tally,
+  tallyWords,
   tileAnswer,
   toggleApart,
+  toggleTile,
   whereOf,
   wordsOf,
 } from "./questions";
@@ -98,90 +102,107 @@ describe("the doors' answers, read into one shape", () => {
   });
 });
 
-describe("the grid's keys and what Enter sends", () => {
+describe("the grid's state and what Enter sends", () => {
   const p = pageOf(PAGE_PAIR);
 
-  it("sends nothing until an answer is chosen", () => {
-    expect(answerBody(gridOf(p), { dataset: "ms-a" })).toBeNull();
+  it("gives every scan the question's first answer at open, so Enter has something to send", () => {
+    const s = gridOf(p);
+    expect(s.answer).toBe("T2w");
+    expect(tileAnswer(s, 301)).toEqual({ kind: "value", value: "T2w" });
+    expect(answerBody(s, { dataset: "ms-a" })).toEqual({ value: "T2w", stacks: p.scans.map((x) => x.stack), except: [], dataset: "ms-a" });
+    expect(tallyWords(s)).toBe("12 scans · T2w 12");
+    // a question that offers no answer sends nothing
+    const none = gridOf(pageOf({ ...PAGE_PAIR, values: [] }));
+    expect(none.answer).toBeNull();
+    expect(answerBody(none, {})).toBeNull();
+    expect(tileAnswer(none, 301)).toBeNull();
   });
 
-  it("answers every scan of the page with one key, and a scan set apart takes the other key", () => {
-    let s = chooseKey(gridOf(p), "1");
-    expect(s.choice).toEqual({ kind: "value", value: "T2w", key: "1" });
-    s = toggleApart(s, 304);
-    s = toggleApart(s, 309);
-    expect(otherOf(s)).toBe("PDw");
-    expect(tileAnswer(s, 304)).toEqual({ kind: "value", value: "PDw" });
-    expect(tileAnswer(s, 301)).toEqual({ kind: "value", value: "T2w" });
+  it("a key makes its answer every scan's; a click gives a scan the other answer and takes it back", () => {
+    let s = chooseKey(gridOf(p), "2");
+    expect(s.answer).toBe("PDw");
+    expect(otherOf(s)).toBe("T2w");
+    s = toggleTile(s, 304);
+    s = toggleTile(s, 309);
+    expect(s.focus).toBe(309);
+    expect(tileAnswer(s, 304)).toEqual({ kind: "value", value: "T2w" });
+    expect(tileAnswer(s, 301)).toEqual({ kind: "value", value: "PDw" });
     expect(answerBody(s, { dataset: "ms-a" })).toEqual({
-      value: "T2w",
+      value: "PDw",
       stacks: p.scans.map((x) => x.stack),
       except: [
-        { stack: 304, value: "PDw" },
-        { stack: 309, value: "PDw" },
+        { stack: 304, value: "T2w" },
+        { stack: 309, value: "T2w" },
       ],
       dataset: "ms-a",
     });
-    // the other key chosen after: the scans set apart follow it
+    expect(tallyWords(s)).toBe("12 scans · PDw 10 · T2w 2");
+    // the other key after: the scans the person clicked keep their answer, now the page's, and say nothing of their own
+    s = chooseKey(s, "1");
+    expect(s.answer).toBe("T2w");
+    expect(s.tiles).toEqual({});
+    expect(answerBody(s, {})?.except).toEqual([]);
+    expect(tallyWords(s)).toBe("12 scans · T2w 12");
+    // a click again puts a scan back
+    s = toggleTile(toggleTile(s, 304), 304);
+    expect(answerBody(s, {})?.except).toEqual([]);
+    // a key with no answer behind it changes nothing
+    const one = gridOf(pageOf({ ...PAGE_PAIR, values: ["T2w"] }));
+    expect(chooseKey(one, "2")).toBe(one);
+    expect(otherOf(one)).toBeNull();
+    expect(toggleTile(one, 301)).toBe(one);
+  });
+
+  it("sets a scan apart for later, and it stays open whatever key is pressed", () => {
+    let s = toggleApart(gridOf(p), 303);
+    expect(tileAnswer(s, 303)).toEqual({ kind: "skip" });
+    expect(apartOf(s)).toEqual([303]);
     s = chooseKey(s, "2");
-    expect(tileAnswer(s, 304)).toEqual({ kind: "value", value: "T2w" });
-    expect(answerBody(s, {})?.except).toEqual([
-      { stack: 304, value: "T2w" },
-      { stack: 309, value: "T2w" },
-    ]);
-    // space again puts a scan back
-    s = toggleApart(s, 304);
-    expect(answerBody(s, {})?.except).toEqual([{ stack: 309, value: "T2w" }]);
-    expect(tally(s)).toEqual({ answer: "PDw", apart: 1, skip: 0, total: 12 });
+    expect(tileAnswer(s, 303)).toEqual({ kind: "skip" });
+    expect(answerBody(s, { cohort: "north" })).toEqual({ value: "PDw", stacks: p.scans.map((x) => x.stack), except: [{ stack: 303, skip: true }], cohort: "north" });
+    expect(tally(s)).toEqual({ total: 12, counts: [["PDw", 11]], nothing: 0, apart: 1 });
+    expect(tallyWords(s)).toBe("12 scans · PDw 11 · 1 set apart");
+    // space again puts it back; a click on one set apart puts it back as well
+    expect(apartOf(toggleApart(s, 303))).toEqual([]);
+    expect(toggleTile(s, 303).tiles[303]).toBeUndefined();
   });
 
-  it("gives a scan set apart a value of its own, no value, or later, and drops one that only repeats the answer", () => {
-    let s = chooseKey(gridOf(p), "1");
-    s = setApart(toggleApart(s, 301), 301, { kind: "value", value: "PDw" });
-    s = setApart(toggleApart(s, 302), 302, { kind: "nothing" });
-    s = setApart(toggleApart(s, 303), 303, { kind: "skip" });
-    s = setApart(toggleApart(s, 305), 305, { kind: "value", value: "T2w" });
-    expect(answerBody(s, { cohort: "north" })).toEqual({
-      value: "T2w",
-      stacks: p.scans.map((x) => x.stack),
-      except: [
-        { stack: 301, value: "PDw" },
-        { stack: 302, nothing: true },
-        { stack: 303, skip: true },
-      ],
-      cohort: "north",
-    });
-    expect(tally(s).skip).toBe(1);
-  });
-
-  it("takes no value as the page's answer, a value from the whole list, and the list for one scan set apart", () => {
-    let s = chooseNothing(gridOf(p));
-    expect(answerBody(s, {})).toMatchObject({ nothing: true });
-    expect(answerBody(s, {})?.value).toBeUndefined();
-    s = openList(s);
-    expect(s.listing).toBe("answer");
-    s = chooseValue(s, "T2*w");
-    expect(s.choice).toEqual({ kind: "value", value: "T2*w", key: "0" });
+  it("opens the whole list once, for the scan in focus or for the scans set apart, and the pick closes it", () => {
+    let s = gridOf(p);
+    s = openList(moved(s, 5));
+    expect(s.listing).toBe(306);
+    s = chooseValue(s, "SWI");
     expect(s.listing).toBeNull();
-    // the whole list's value that is one of the keys counts as that key
-    expect(chooseValue(openList(s), "PDw").choice).toEqual({ kind: "value", value: "PDw", key: "2" });
-    // with a value from the list, a scan set apart takes the first key that is not it
-    s = toggleApart(s, 306);
-    expect(tileAnswer(s, 306)).toEqual({ kind: "value", value: "T2w" });
-    s = chooseValue(openList(s, 306), "SWI");
     expect(tileAnswer(s, 306)).toEqual({ kind: "value", value: "SWI" });
-    expect(s.choice).toEqual({ kind: "value", value: "T2*w", key: "0" });
-  });
-
-  it("leaves a scan set apart for later where the question has no other answer", () => {
-    const one = pageOf({ ...PAGE_PAIR, values: ["T2w"] });
-    const s = toggleApart(chooseKey(gridOf(one), "1"), 301);
-    expect(chooseKey(s, "2")).toBe(s);
-    expect(tileAnswer(s, 301)).toEqual({ kind: "skip" });
+    // the list's value that is the page's answer says nothing of its own
+    s = chooseValue(openList(s, 306), "T2w");
+    expect(s.tiles[306]).toBeUndefined();
+    // no value for one scan
+    s = chooseNothing(openList(s, 307));
+    expect(tileAnswer(s, 307)).toEqual({ kind: "nothing" });
+    expect(tallyWords(s)).toBe("12 scans · T2w 11 · no value 1");
+    // with the scan in focus set apart, 0 opens the list for every scan set apart, and the pick gives them that value;
+    // in focus on another scan, it is that scan's
+    s = toggleApart(toggleApart(s, 301), 302);
+    expect(openList(moved(s, 3)).listing).toBe(305);
+    s = openList(s);
+    expect(s.listing).toBe("apart");
+    s = chooseValue(s, "DWI");
+    expect(apartOf(s)).toEqual([]);
+    expect(tileAnswer(s, 301)).toEqual({ kind: "value", value: "DWI" });
+    expect(tileAnswer(s, 302)).toEqual({ kind: "value", value: "DWI" });
+    expect(answerBody(s, {})?.except).toEqual([
+      { stack: 301, value: "DWI" },
+      { stack: 302, value: "DWI" },
+      { stack: 307, nothing: true },
+    ]);
+    // 0 again closes it; a pick with nothing open changes nothing
+    expect(openList(openList(s)).listing).toBeNull();
+    expect(chooseValue(s, "SWI")).toBe(s);
   });
 
   it("maps the keys, and moves the focus within the page", () => {
-    expect(["1", "2", "0", "-", " ", "Enter", "f", "?", "Escape", "x"].map((k) => keyAct(k).kind)).toEqual(["key", "key", "list", "nothing", "apart", "apply", "full", "reasons", "back", "none"]);
+    expect(["1", "2", "0", " ", "Enter", "f", "?", "Escape", "-", "x"].map((k) => keyAct(k).kind)).toEqual(["key", "key", "list", "apart", "apply", "full", "reasons", "back", "none", "none"]);
     expect(keyAct("ArrowDown", 4)).toEqual({ kind: "move", by: 4 });
     expect(keyAct("ArrowLeft")).toEqual({ kind: "move", by: -1 });
     const s = gridOf(p);
@@ -192,8 +213,9 @@ describe("the grid's keys and what Enter sends", () => {
   });
 
   it("says what an answer did, and reads a stale page again", () => {
-    const s = toggleApart(chooseKey(gridOf(p), "1"), 304);
-    expect(answeredWords(answeredOf(answered("base:PDw|T2w", [301, 302], 0)), s)).toBe("2 scans answered: T2w · 1 set apart · sorted again");
+    const s = toggleTile(gridOf(p), 304);
+    expect(answeredWords(answeredOf(answered("base:PDw|T2w", [301, 302], 0)), s)).toBe("2 scans answered: T2w 11, PDw 1 · sorted again");
+    expect(answeredWords(answeredOf(answered("base:PDw|T2w", [301, 302], 0)), gridOf(p))).toBe("2 scans answered: T2w · sorted again");
     expect(answeredWords(answeredOf({ answered: 1, skipped: [5], resort: { state: "waiting", why: "a sort is running; these scans wait for the next" } }))).toBe("1 scan answered · 1 left for later · a sort is running; these scans wait for the next");
     expect(refusedWords(new DoorError(409, { error: "stack 303 is not asked by base:missing here" }))).toEqual({ words: "stack 303 is not asked by base:missing here. The page is read again.", stale: true });
     expect(refusedWords(new DoorError(403, {}))).toEqual({ words: "Answering needs work on the Review page.", stale: false });
@@ -276,46 +298,112 @@ describe("a question's grid", () => {
   });
   const settle = () => act(async () => new Promise((r) => setTimeout(r, 0)));
   const press = (key: string) => act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+  const click = (sel: string, shift = false) => act(async () => void host.querySelector(sel)!.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: shift })));
+  const tile = (stack: number) => host.querySelector(`[data-stack="${stack}"]`)!;
 
-  it("draws the page's scans framed by NILS's answer, the keys, and nothing of NILS's on a blind scan", async () => {
+  it("draws one bar and the scans framed by the answer they will get, the first answer at open, with no dropdown and nothing of NILS's on a blind scan", async () => {
     await act(async () => root.render(<QuestionGrid caps={caps} qkey="base:missing" where={{ dataset: "ms-a" }} />));
     await settle();
     expect(calls[0].url).toBe("/api/review/questions/base%3Amissing/scans?dataset=ms-a&page=1&limit=50");
     expect(host.querySelector("h1")?.textContent).toBe("Which base?");
+    // the bar: the two answers as chips, other…, ?, the tally and Apply; nothing else above the pictures
+    expect([...host.querySelectorAll(".qgrid-bar .q-keys .opt")].map((b) => b.textContent)).toEqual(["1T1w", "2T2w", "0other…", "?"]);
+    expect(host.querySelector(".q-chip.on")?.textContent).toBe("1T1w");
+    expect([...host.querySelectorAll(".q-chip")].map((b) => b.getAttribute("data-slot"))).toEqual(["6", "4"]);
+    expect(host.querySelector(".q-tally")?.textContent).toBe("7 scans · T1w 7");
+    expect(host.querySelector(".qgrid-bar .button")?.textContent).toBe("Apply Enter");
+    expect(host.querySelector(".q-help")?.getAttribute("title")).toBe(KEYS_HELP);
+    expect(host.querySelectorAll(".qgrid-page > *")).toHaveLength(3);
+    // every tile framed in the first answer's colour, the word in its corner
     expect(host.querySelectorAll(".q-tile")).toHaveLength(7);
-    // NILS has no answer here: the tiles say so, in the caution colour
-    expect(host.querySelectorAll(".q-tile.none")).toHaveLength(6);
-    const blind = host.querySelector('[data-stack="205"]')!;
-    expect(blind.className).toContain("blind");
-    expect(blind.querySelector(".q-s1")).toBeNull();
-    expect(host.querySelector('[data-stack="203"] .q-staged')?.textContent).toBe("proposed T2w");
-    expect(host.querySelector('[data-stack="201"] .q-s1')?.textContent).toBe("S1 T1w 0.91");
-    expect([...host.querySelectorAll(".q-keys .opt")].map((b) => b.textContent)).toEqual(["1T1w", "2T2w", "0other value", "-no value"]);
+    expect([...host.querySelectorAll(".q-tile")].every((t) => t.getAttribute("data-slot") === "6")).toBe(true);
+    expect(tile(201).querySelector(".q-answer")?.textContent).toBe("T1w");
+    expect(tile(201).querySelector(".q-name")?.textContent).toBe("Ax_T2w_2D_TSE_201");
+    expect(tile(201).getAttribute("title")).toContain("NILS: no value");
+    expect(host.querySelector(".q-tile select")).toBeNull();
+    expect(host.querySelector(".q-list")).toBeNull();
+    // a blind scan keeps its mark and none of NILS's, a staged answer and System 1's are marked
+    expect(tile(205).className).toContain("blind");
+    expect(tile(205).querySelector(".q-blind")?.textContent).toBe("blind");
+    expect(tile(205).querySelector(".q-s1")).toBeNull();
+    expect(tile(203).querySelector(".q-staged")?.textContent).toBe("proposed T2w");
+    expect(tile(201).querySelector(".q-s1")?.textContent).toBe("S1 T1w 0.91");
+    expect(host.querySelector(".qgrid-head .meta")?.textContent).toContain("1 scan read blind first, NILS's answers hidden");
     // no dialog, no scope, no why field
     expect(host.querySelector("dialog")).toBeNull();
     expect(host.querySelector('[role="radiogroup"]')).toBeNull();
     expect(host.querySelector('input[aria-label="Why"]')).toBeNull();
-    expect(host.querySelector(".q-keys .opt.on")).toBeNull();
   });
 
-  it("answers the page with one key and a scan set apart on Enter, then goes on to the next question", async () => {
+  it("a key changes every scan's answer, a click one scan's, space sets one apart, and Enter sends them; the next question opens", async () => {
     await act(async () => root.render(<QuestionGrid caps={caps} qkey="base:missing" where={{ dataset: "ms-a" }} />));
     await settle();
-    await press("1");
-    // only the chosen key in colour
-    expect(host.querySelector(".q-keys .opt.on")?.textContent).toBe("1T1w");
-    expect(host.querySelector(".q-keys .opt.on")?.getAttribute("data-slot")).toBe("6");
-    await press("ArrowRight");
+    await press("2");
+    expect(host.querySelector(".q-chip.on")?.textContent).toBe("2T2w");
+    expect(tile(201).getAttribute("data-slot")).toBe("4");
+    expect(tile(201).querySelector(".q-answer")?.textContent).toBe("T2w");
+    await click('[data-stack="202"]');
+    expect(tile(202).getAttribute("data-slot")).toBe("6");
+    expect(tile(202).querySelector(".q-answer")?.textContent).toBe("T1w");
+    expect(tile(202).className).toContain("own");
+    expect(tile(202).getAttribute("aria-current")).toBe("true");
     await press("ArrowRight");
     await press(" ");
-    expect(host.querySelector('[data-stack="203"]')?.className).toContain("apart");
+    expect(tile(203).className).toContain("apart");
+    expect(tile(203).querySelector(".q-answer")?.textContent).toBe("set apart");
+    expect(tile(203).hasAttribute("data-slot")).toBe(false);
+    expect(host.querySelector(".q-tally")?.textContent).toBe("7 scans · T2w 5 · T1w 1 · 1 set apart");
     await press("Enter");
     await settle();
     const post = calls.find((c) => c.method === "POST")!;
     expect(post.url).toBe("/api/review/questions/base%3Amissing/answer");
-    expect(post.body).toEqual({ value: "T1w", stacks: [201, 202, 203, 204, 205, 206, 207], except: [{ stack: 203, value: "T2w" }], dataset: "ms-a" });
+    expect(post.body).toEqual({
+      value: "T2w",
+      stacks: [201, 202, 203, 204, 205, 206, 207],
+      except: [
+        { stack: 202, value: "T1w" },
+        { stack: 203, skip: true },
+      ],
+      dataset: "ms-a",
+    });
     // nothing left of this question: the next one in the list opens
     expect(location.hash).toBe("#review/questions/base%3APDw%7CT2w?dataset=ms-a");
+  });
+
+  it("0 opens the whole list once over the scan in focus, or for the scans set apart, and the pick closes it", async () => {
+    await act(async () => root.render(<QuestionGrid caps={caps} qkey="base:missing" where={{ dataset: "ms-a" }} />));
+    await settle();
+    await press("0");
+    const pop = tile(201).querySelector(".q-pop")!;
+    expect(pop.getAttribute("aria-label")).toBe("a value for scan 201");
+    expect([...pop.querySelectorAll(".opt")].map((b) => b.textContent)).toEqual(["DWI", "SWI", "T2*w", "T2w", "PDw", "T1w", "no value"]);
+    expect(host.querySelector(".q-other")?.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => void [...pop.querySelectorAll("button")].find((b) => b.textContent === "PDw")!.click());
+    expect(host.querySelector(".q-pop")).toBeNull();
+    expect(tile(201).querySelector(".q-answer")?.textContent).toBe("PDw");
+    expect(tile(201).getAttribute("data-slot")).toBe("5");
+    // a click on it puts it back with the rest
+    await click('[data-stack="201"]');
+    expect(tile(201).querySelector(".q-answer")?.textContent).toBe("T1w");
+    // shift-click sets apart; with scans set apart, the list opens for them under the bar
+    await click('[data-stack="204"]', true);
+    await click('[data-stack="206"]', true);
+    expect(host.querySelectorAll(".q-tile.apart")).toHaveLength(2);
+    await click(".q-other");
+    const bar = host.querySelector(".qgrid-bar > .q-pop")!;
+    expect(bar.getAttribute("aria-label")).toBe("a value for the 2 scans set apart");
+    await act(async () => void [...bar.querySelectorAll("button")].find((b) => b.textContent === "no value")!.click());
+    expect(host.querySelector(".q-pop")).toBeNull();
+    expect(host.querySelectorAll(".q-tile.apart")).toHaveLength(0);
+    expect(tile(204).className).toContain("nothing");
+    expect(tile(204).querySelector(".q-answer")?.textContent).toBe("no value");
+    expect(host.querySelector(".q-tally")?.textContent).toBe("7 scans · T1w 5 · no value 2");
+    // Escape closes an open list and stays on the page
+    await press("0");
+    expect(host.querySelector(".q-pop")).not.toBeNull();
+    await press("Escape");
+    expect(host.querySelector(".q-pop")).toBeNull();
+    expect(location.hash).toBe("");
   });
 
   it("says so when the last question is answered, with the way back to the list", async () => {
@@ -331,23 +419,21 @@ describe("a question's grid", () => {
     expect(host.querySelector(".qgrid-said")?.textContent).toBe("7 scans answered: T2w · sorted again");
   });
 
-  it("reads the page again while scans are left, and says nothing can be applied before a key", async () => {
+  it("applies the first answer as it stands, and reads the page again while scans are left", async () => {
     left = 2;
     await act(async () => root.render(<QuestionGrid caps={caps} qkey="base:missing" where={{ dataset: "ms-a" }} />));
     await settle();
     await press("Enter");
-    expect(host.querySelector(".qgrid-said")?.textContent).toBe("Choose an answer first: 1, 2, 0 or -.");
-    await press("-");
-    await press("Enter");
     await settle();
-    expect(calls.filter((c) => c.method === "POST")[0].body).toMatchObject({ nothing: true, except: [] });
+    expect(calls.filter((c) => c.method === "POST")[0].body).toEqual({ value: "T1w", stacks: [201, 202, 203, 204, 205, 206, 207], except: [], dataset: "ms-a" });
     expect(calls.filter((c) => c.url.includes("/scans")).length).toBe(2);
-    expect(host.querySelector(".qgrid-said")?.textContent).toContain("7 scans answered: no value");
+    expect(host.querySelector(".qgrid-said")?.textContent).toContain("7 scans answered: T1w");
   });
 
   it("offers no answer to a person who may only see", async () => {
     await act(async () => root.render(<QuestionGrid caps={reader} qkey="base:missing" where={{}} />));
     await settle();
+    expect((host.querySelector(".qgrid-bar .button") as HTMLButtonElement).disabled).toBe(true);
     await press("1");
     await press("Enter");
     expect(calls.some((c) => c.method === "POST")).toBe(false);

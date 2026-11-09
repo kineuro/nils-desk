@@ -5,13 +5,16 @@
 // questions into plain ones with their distinct scans (`Which base? 7
 // scans`, `T2w or PDw? 12 scans`), pages a question's scans with each one's
 // picture and NILS's answer, and takes one answer for the scans a person saw
-// with the scans set apart as exceptions, then re-sorts them at once.
+// with the scans set otherwise as exceptions, then re-sorts them at once.
 //
-// The grid's keys: 1 and 2 are the question's two answers, 0 the axis's full
-// list, - no value; space sets the focused scan apart (it takes the other
-// key's answer), Enter applies, the arrows move, f opens a scan full size, ?
-// shows each scan's rule. No dialog, no scope, no why field. Everything here
-// is pure, so the page, the dataset viewer and their tests read one shape.
+// The grid reads like the gallery (UX round 6): the question's first answer
+// is every scan's at open; keys 1 and 2 make theirs the answer of every scan
+// not set otherwise; a click gives a scan the other answer and takes it back;
+// space sets the focused scan apart (it stays open); 0 opens the axis's whole
+// list once, for the focused scan or for the ones set apart; Enter applies,
+// the arrows move, f opens a scan full size, ? shows each scan's rule. No
+// dialog, no scope, no why field. Everything here is pure, so the page, the
+// dataset viewer and their tests read one shape.
 
 import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -351,30 +354,32 @@ export function kindsAnswered(list: QuestionList | null): Set<string> {
 
 // ------------------------------------------------------------ the grid's state
 
-/** The page's answer: one of the two keys, a value from the full list, or no value. */
+/** A key's answer under an open scan (ScanQuestion): one of the two keys, a value from the full list, or no value. */
 export type Choice = { kind: "value"; value: string; key: "1" | "2" | "0" } | { kind: "nothing" };
 
-/** A scan set apart: it takes the other key's answer, a value of its own, no value, or waits for later. */
-export type Apart = { kind: "other" } | { kind: "value"; value: string } | { kind: "nothing" } | { kind: "skip" };
+/** What the person set on one scan, apart from the answer every scan gets: a value of its own, no value, or set apart for later. */
+export type Tile = { kind: "value"; value: string } | { kind: "nothing" } | { kind: "apart" };
 
 /** What one scan gets when the page is applied. */
 export type TileAnswer = { kind: "value"; value: string } | { kind: "nothing" } | { kind: "skip" };
 
 export interface GridState {
   page: QPage;
-  choice: Choice | null;
-  apart: Record<number, Apart>;
+  /** The answer every scan gets unless the person set it otherwise: the first of the question's answers at open, then the key pressed. Null where the question offers none. */
+  answer: string | null;
+  /** The scans set otherwise, by stack. */
+  tiles: Record<number, Tile>;
   /** The scan the keys act on. */
   focus: number | null;
-  /** The full list open: for the page's answer, or for one scan set apart. */
-  listing: "answer" | number | null;
+  /** The axis's whole value list open: for one scan, or for the scans set apart. */
+  listing: number | "apart" | null;
   /** Each scan's rule shown under it. */
   reasons: boolean;
 }
 
-/** A page's first state: nothing chosen, nothing set apart, the focus on the first scan. */
+/** A page's first state: the first answer for every scan, none set otherwise, the focus on the first scan. */
 export function gridOf(page: QPage): GridState {
-  return { page, choice: null, apart: {}, focus: page.scans[0]?.stack ?? null, listing: null, reasons: false };
+  return { page, answer: page.values[0] ?? null, tiles: {}, focus: page.scans[0]?.stack ?? null, listing: null, reasons: false };
 }
 
 /** The answer key 1 or 2 gives, where the question has one. */
@@ -382,66 +387,100 @@ export function keyValue(s: Pick<GridState, "page">, key: "1" | "2"): string | n
   return s.page.values[key === "1" ? 0 : 1] ?? null;
 }
 
-/** Choose one of the two keys as the page's answer. */
+/** A scan set to the answer every scan gets says nothing of its own. */
+function settled(s: GridState): GridState {
+  const tiles: Record<number, Tile> = {};
+  for (const [k, t] of Object.entries(s.tiles)) if (!(t.kind === "value" && t.value === s.answer)) tiles[Number(k)] = t;
+  return { ...s, tiles };
+}
+
+/** Press key 1 or 2: that answer for every scan not set otherwise. */
 export function chooseKey(s: GridState, key: "1" | "2"): GridState {
   const value = keyValue(s, key);
-  return value === null ? s : { ...s, choice: { kind: "value", value, key }, listing: null };
+  return value === null ? s : settled({ ...s, answer: value, listing: null });
 }
 
-/** Choose a value of the full list: as the page's answer, or as a set-apart scan's own. */
-export function chooseValue(s: GridState, value: string): GridState {
-  if (typeof s.listing === "number") return { ...s, apart: { ...s.apart, [s.listing]: { kind: "value", value } }, listing: null };
-  const key = s.page.values[0] === value ? "1" : s.page.values[1] === value ? "2" : "0";
-  return { ...s, choice: { kind: "value", value, key }, listing: null };
+/** The other of the question's two answers: what a click gives a scan. Null where the question offers one answer. */
+export function otherOf(s: Pick<GridState, "page" | "answer">): string | null {
+  return s.page.values.find((v) => v !== s.answer) ?? null;
 }
 
-/** No value here: the page's answer, or a set-apart scan's while its list is open. */
-export function chooseNothing(s: GridState): GridState {
-  if (typeof s.listing === "number") return { ...s, apart: { ...s.apart, [s.listing]: { kind: "nothing" } }, listing: null };
-  return { ...s, choice: { kind: "nothing" }, listing: null };
+/** A scan set to one thing: a value, no value, or apart. */
+function setTile(s: GridState, stack: number, t: Tile): GridState {
+  if (!s.page.scans.some((x) => x.stack === stack)) return s;
+  return settled({ ...s, tiles: { ...s.tiles, [stack]: t } });
 }
 
-/** Open or close the full list, for the page's answer or for a set-apart scan. */
+/** A scan put back with the rest. */
+function clearTile(s: GridState, stack: number): GridState {
+  const tiles = { ...s.tiles };
+  delete tiles[stack];
+  return { ...s, tiles };
+}
+
+/** A click on a scan: the other answer where it has the page's, else back to the page's. Unchanged where the question offers one answer. */
+export function toggleTile(s: GridState, stack: number): GridState {
+  if (!s.page.scans.some((x) => x.stack === stack)) return s;
+  const other = otherOf(s);
+  if (other === null) return s;
+  const t = s.tiles[stack];
+  const at = { ...s, focus: stack, listing: s.listing === stack ? null : s.listing };
+  return t ? clearTile(at, stack) : setTile(at, stack, { kind: "value", value: other });
+}
+
+/** Set a scan apart for later (it stays open), or put it back with the rest. */
+export function toggleApart(s: GridState, stack: number): GridState {
+  if (!s.page.scans.some((x) => x.stack === stack)) return s;
+  const at = { ...s, focus: stack, listing: s.listing === stack ? null : s.listing };
+  return s.tiles[stack]?.kind === "apart" ? clearTile(at, stack) : setTile(at, stack, { kind: "apart" });
+}
+
+/** Give a scan a value of the whole list, or no value. */
+export function setTileValue(s: GridState, stack: number, v: { kind: "value"; value: string } | { kind: "nothing" }): GridState {
+  return setTile(s, stack, v);
+}
+
+/** The scans set apart, in the page's order. */
+export function apartOf(s: GridState): number[] {
+  return s.page.scans.filter((x) => s.tiles[x.stack]?.kind === "apart").map((x) => x.stack);
+}
+
+/** Whether the scan in focus is set apart: then 0 acts on every scan set apart. */
+export function focusApart(s: Pick<GridState, "focus" | "tiles">): boolean {
+  return s.focus !== null && s.tiles[s.focus]?.kind === "apart";
+}
+
+/** Open the whole value list for the focused scan, or for every scan set apart where the focused one is; again closes it. */
 export function openList(s: GridState, forStack: number | null = null): GridState {
-  const want = forStack === null ? "answer" : forStack;
+  const want = forStack !== null ? forStack : focusApart(s) ? "apart" : s.focus;
+  if (want === null) return s;
   return { ...s, listing: s.listing === want ? null : want };
 }
 
-/** The value a scan set apart takes: the other of the two keys. Null where the question has no other. */
-export function otherOf(s: Pick<GridState, "page" | "choice">): string | null {
-  const [a, b] = s.page.values;
-  const c = s.choice;
-  if (c?.kind === "value" && c.key === "1") return b ?? null;
-  if (c?.kind === "value" && c.key === "2") return a ?? null;
-  const taken = c?.kind === "value" ? c.value : null;
-  return [a, b].find((v) => v !== undefined && v !== taken) ?? null;
+/** Choose a value of the whole list for what the list is open for. */
+export function chooseValue(s: GridState, value: string): GridState {
+  return chooseListed(s, { kind: "value", value });
 }
 
-/** Set a scan apart, or put it back with the rest. */
-export function toggleApart(s: GridState, stack: number): GridState {
-  if (!s.page.scans.some((x) => x.stack === stack)) return s;
-  const apart = { ...s.apart };
-  if (stack in apart) delete apart[stack];
-  else apart[stack] = { kind: "other" };
-  return { ...s, apart, focus: stack, listing: s.listing === stack ? null : s.listing };
+/** No value for what the list is open for. */
+export function chooseNothing(s: GridState): GridState {
+  return chooseListed(s, { kind: "nothing" });
 }
 
-/** Give a scan set apart its own answer. */
-export function setApart(s: GridState, stack: number, a: Apart): GridState {
-  if (!s.page.scans.some((x) => x.stack === stack)) return s;
-  return { ...s, apart: { ...s.apart, [stack]: a } };
+function chooseListed(s: GridState, t: { kind: "value"; value: string } | { kind: "nothing" }): GridState {
+  if (s.listing === null) return s;
+  let out: GridState = { ...s, listing: null };
+  if (s.listing === "apart") for (const stack of apartOf(s)) out = setTile(out, stack, t);
+  else out = setTile(out, s.listing, t);
+  return out;
 }
 
-/** What a scan gets when the page is applied; null while no answer is chosen. */
+/** What a scan gets when the page is applied: the page's answer, its own, no value, or nothing yet (set apart). Null where the question offers no answer. */
 export function tileAnswer(s: GridState, stack: number): TileAnswer | null {
-  if (!s.choice) return null;
-  const a = s.apart[stack];
-  if (!a) return s.choice.kind === "nothing" ? { kind: "nothing" } : { kind: "value", value: s.choice.value };
-  if (a.kind === "other") {
-    const v = otherOf(s);
-    return v === null ? { kind: "skip" } : { kind: "value", value: v };
-  }
-  return a;
+  const t = s.tiles[stack];
+  if (t?.kind === "apart") return { kind: "skip" };
+  if (t) return t;
+  return s.answer === null ? null : { kind: "value", value: s.answer };
 }
 
 export interface AnswerBody extends Json {
@@ -453,22 +492,19 @@ export interface AnswerBody extends Json {
   cohort?: string;
 }
 
-/** The answer door's body for the page as it stands: every scan shown, the set-apart ones as exceptions; null while no answer is chosen. */
+/** The answer door's body for the page as it stands: every scan shown, the ones set otherwise as exceptions; null where no answer is offered. */
 export function answerBody(s: GridState, where: Where): AnswerBody | null {
-  const c = s.choice;
-  if (!c) return null;
+  if (s.answer === null) return null;
   const except: Json[] = [];
   for (const scan of s.page.scans) {
-    if (!(scan.stack in s.apart)) continue;
-    const t = tileAnswer(s, scan.stack);
+    const t = s.tiles[scan.stack];
     if (!t) continue;
-    if (t.kind === "skip") except.push({ stack: scan.stack, skip: true });
-    else if (t.kind === "nothing") {
-      if (c.kind !== "nothing") except.push({ stack: scan.stack, nothing: true });
-    } else if (c.kind === "nothing" || c.value !== t.value) except.push({ stack: scan.stack, value: t.value });
+    if (t.kind === "apart") except.push({ stack: scan.stack, skip: true });
+    else if (t.kind === "nothing") except.push({ stack: scan.stack, nothing: true });
+    else if (t.value !== s.answer) except.push({ stack: scan.stack, value: t.value });
   }
   return {
-    ...(c.kind === "nothing" ? { nothing: true as const } : { value: c.value }),
+    value: s.answer,
     stacks: s.page.scans.map((x) => x.stack),
     except,
     ...(where.dataset ? { dataset: where.dataset } : {}),
@@ -476,12 +512,31 @@ export function answerBody(s: GridState, where: Where): AnswerBody | null {
   };
 }
 
-/** How the page stands, in a line: what the answer gives and how many are set apart. */
-export function tally(s: GridState): { answer: string | null; apart: number; skip: number; total: number } {
-  const c = s.choice;
-  let skip = 0;
-  for (const scan of s.page.scans) if (tileAnswer(s, scan.stack)?.kind === "skip") skip++;
-  return { answer: c === null ? null : c.kind === "nothing" ? "no value" : c.value, apart: Object.keys(s.apart).length, skip, total: s.page.scans.length };
+/** How the page stands: how many scans get each answer (the page's first), how many get no value, how many are set apart. */
+export function tally(s: GridState): { total: number; counts: [string, number][]; nothing: number; apart: number } {
+  const by = new Map<string, number>();
+  if (s.answer !== null) by.set(s.answer, 0);
+  let nothing = 0;
+  let apart = 0;
+  for (const scan of s.page.scans) {
+    const t = tileAnswer(s, scan.stack);
+    if (!t) continue;
+    if (t.kind === "skip") apart++;
+    else if (t.kind === "nothing") nothing++;
+    else by.set(t.value, (by.get(t.value) ?? 0) + 1);
+  }
+  return { total: s.page.scans.length, counts: [...by.entries()], nothing, apart };
+}
+
+/** The tally in words: `10 scans · brain-neck 6 · brain 4 · 1 set apart`. */
+export function tallyWords(s: GridState): string {
+  const n = (v: number) => v.toLocaleString("en-US");
+  const t = tally(s);
+  const parts = [`${n(t.total)} ${t.total === 1 ? "scan" : "scans"}`];
+  for (const [v, c] of t.counts) if (c > 0 || v === s.answer) parts.push(`${v} ${n(c)}`);
+  if (t.nothing > 0) parts.push(`no value ${n(t.nothing)}`);
+  if (t.apart > 0) parts.push(`${n(t.apart)} set apart`);
+  return parts.join(" · ");
 }
 
 /** The focus moved by some scans, held to the page. */
@@ -496,7 +551,6 @@ export function moved(s: GridState, by: number): GridState {
 export type GridAct =
   | { kind: "key"; key: "1" | "2" }
   | { kind: "list" }
-  | { kind: "nothing" }
   | { kind: "apart" }
   | { kind: "apply" }
   | { kind: "move"; by: number }
@@ -514,8 +568,6 @@ export function keyAct(key: string, columns = 1): GridAct {
       return { kind: "key", key };
     case "0":
       return { kind: "list" };
-    case "-":
-      return { kind: "nothing" };
     case " ":
       return { kind: "apart" };
     case "Enter":
@@ -544,9 +596,11 @@ export function answeredWords(a: Answered, s: GridState | null = null): string {
   const n = (v: number) => v.toLocaleString("en-US");
   const parts = [`${n(a.answered)} ${a.answered === 1 ? "scan" : "scans"} answered`];
   const t = s ? tally(s) : null;
-  if (t?.answer) parts[0] += `: ${t.answer}`;
-  const apart = t ? t.apart - t.skip : 0;
-  if (apart > 0) parts.push(`${n(apart)} set apart`);
+  if (t) {
+    const got = t.counts.filter(([, c]) => c > 0).map(([v, c]) => (t.counts.length === 1 && t.nothing === 0 ? v : `${v} ${n(c)}`));
+    if (t.nothing > 0) got.push(`no value ${n(t.nothing)}`);
+    if (got.length > 0) parts[0] += `: ${got.join(", ")}`;
+  }
   if (a.skipped.length > 0) parts.push(`${n(a.skipped.length)} left for later`);
   if (a.staged) parts.push("waiting for a person to confirm");
   if (a.resort?.state === "done") parts.push("sorted again");
