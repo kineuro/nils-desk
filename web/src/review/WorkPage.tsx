@@ -58,9 +58,22 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
   const [mine, setMine] = useState<Record<number, number>>({});
   const [tick, setTick] = useState(0);
   const [said, setSaid] = useState<string | null>(null);
-  // UX round 5: the re-sort a commit queued, followed through the jobs door until it is over
+  // UX round 5: the re-sort a commit queued, followed through the jobs door until it is over. The follow's line
+  // stands in for the said line only while the job runs: when the job ends, its last line becomes the said line
+  // and the follow is dropped, and anything said later goes through `say`, which drops the follow first. So a
+  // line said after a followed re-sort (another commit, a refusal) is never hidden behind the follow's.
   const [follow, setFollow] = useState<{ s: Standing; resort: Resort } | null>(null);
-  const followed = useFollowedJob(follow?.resort.job ?? null, () => setTick((x) => x + 1));
+  const followed = useFollowedJob(follow?.resort.job ?? null, (job) => {
+    // `follow` here is the one whose job this is: the follower is keyed on the job, set in the same render
+    if (follow) setSaid(followLine(follow.s, follow.resort, job));
+    setFollow(null);
+    setTick((x) => x + 1);
+  });
+  /** Say a line on the page; a follow still shown gives way to it. */
+  const say = (words: string | null) => {
+    setFollow(null);
+    setSaid(words);
+  };
   const [committing, setCommitting] = useState<Standing | null>(null);
   const [reading, setReading] = useState<Standing | null>(null);
   const prefill = prefillOf(query);
@@ -232,10 +245,7 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
             if (resort.job !== null) {
               setSaid(null);
               setFollow({ s, resort });
-            } else {
-              setFollow(null);
-              setSaid(committedLine(s, answer));
-            }
+            } else say(committedLine(s, answer));
             setTick((x) => x + 1);
           }}
         />

@@ -361,6 +361,61 @@ describe("a reviewer's page", () => {
     host.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("drops a finished follow when something else is said: a later line replaces the re-sort's last", async () => {
+    // the follow reads the job every few seconds: the clock is moved by hand
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const committed = new Set<string>();
+    let jobReads = 0;
+    const e = fakeEngine((c) => {
+      if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: SUMMARY };
+      if (c.method === "GET" && c.path === "/api/review/proposals") {
+        const rows = STANDING_ROWS.filter((r) => !committed.has(String((r as { axis: string }).axis)));
+        return { status: 200, body: { count: rows.length, proposals: rows } };
+      }
+      if (c.method === "GET" && c.path === "/api/review/questions") return { status: 200, body: QUESTIONS_RAW };
+      if (c.method === "GET" && c.path === "/api/campaigns") return { status: 200, body: { count: CAMPAIGNS.length, campaigns: CAMPAIGNS } };
+      if (c.method === "GET" && /\/api\/campaigns\/\d+\/mine$/u.test(c.path)) return { status: 200, body: { count: 0, total: 0, values: {}, answers: [] } };
+      if (c.method === "POST" && c.path === "/api/decisions/commit") {
+        const axis = String(c.body?.axis);
+        committed.add(axis);
+        // the first commit queues its re-sort as a job; the second answers as an older engine, its words inline
+        if (axis === "post_contrast") return { status: 200, body: { committed: [1], items: 88, left: 1, split: [], resort: { state: "queued", job: 356, stacks: 1701, words: "1,701 scan(s) to sort again, queued as job 356" } } };
+        return { status: 200, body: { committed: [2], items: 3, left: 0, split: [], resort: { state: "done", stacks: 59, words: "re-sorted 59 scans" } } };
+      }
+      if (c.method === "GET" && c.path === "/api/jobs/356") {
+        jobReads += 1;
+        const done = jobReads === 1 ? 900 : 1701;
+        return { status: 200, body: { id: 356, kind: "resort", name: "re-sort", state: done < 1701 ? "running" : "done", progress: { done, of: 1701, what: "scans" }, error: null, result: null } };
+      }
+      return undefined;
+    });
+    await act(async () => root.render(<WorkPage caps={caps} />));
+    await settle(8);
+    act(() => button(host, "Commit 1,701")!.click());
+    act(() => button(host.querySelector<HTMLDialogElement>("dialog[open]")!, "Commit 1,701")!.click());
+    await settle(8);
+    expect(host.querySelector(".said")?.textContent).toMatch(/^Committed 1,701 post-contrast answers · (sorting them again \(job 356\)|900 of 1,701 sorted again \(job 356\))$/u);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    await settle(8);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post-contrast answers · 1,701 of 1,701 sorted again");
+    expect(jobReads).toBe(2);
+    // the follow is over; the next commit's line replaces its last line
+    act(() => button(host, "Commit 59")!.click());
+    act(() => button(host.querySelector<HTMLDialogElement>("dialog[open]")!, "Commit 59")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/decisions/commit").map((c) => c.body?.axis)).toEqual(["post_contrast", "body_part"]);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 59 body part answers. Re-sorted 59 scans.");
+    // the job is not read again once its follow is dropped
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    expect(jobReads).toBe(2);
+    expect(host.querySelector(".rv-card.proposed")).toBeNull();
   });
 
   it("commits a model's sure answers from its card through the confirm, says what it did, and reads the page again", async () => {

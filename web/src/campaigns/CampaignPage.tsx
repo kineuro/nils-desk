@@ -6,7 +6,7 @@
 // ruling 35 (d)) is the maker's and an administrator's: the answers by rater,
 // what was settled and written, the counts by value and the labels.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -226,26 +226,34 @@ const NAMES_READ = 50;
  */
 function useScanNames(enabled: boolean, stacks: readonly number[]): Map<number, ScanName> {
   const [names, setNames] = useState<Map<number, ScanName>>(() => new Map());
-  const wanted = enabled ? stacks.filter((s) => !names.has(s)).slice(0, NAMES_READ) : [];
-  const key = wanted.join(",");
+  // the stacks asked so far: each header is read once, however often the rows are drawn again while reads are out
+  const asked = useRef(new Set<number>());
+  // keyed on the rows' stacks, not on what is still unnamed: a name landing must not start the reads over
+  const key = enabled ? stacks.join(",") : "";
   useEffect(() => {
-    if (wanted.length === 0) return;
+    if (key === "") return;
+    const queue = [...new Set(stacks)].filter((s) => !asked.current.has(s)).slice(0, Math.max(0, NAMES_READ - asked.current.size));
+    if (queue.length === 0) return;
+    for (const s of queue) asked.current.add(s);
     let alive = true;
-    const queue = [...wanted];
     const read = async () => {
-      for (let s = queue.shift(); s !== undefined && alive; s = queue.shift()) {
+      while (alive) {
+        const s = queue.shift();
+        if (s === undefined) return;
         const h = await review.header(s).catch(() => null);
-        if (!alive) return;
         const d = h?.texts?.series_description;
         const got: ScanName = { description: typeof d === "string" && d.trim() ? d.trim() : null, code: null };
+        // merged as it lands, even when the rows changed meanwhile: the name is the stack's, whatever row shows it
         setNames((m) => new Map(m).set(s, got));
       }
     };
     void Promise.all(Array.from({ length: 6 }, read));
     return () => {
       alive = false;
+      // not started yet: free to be asked by the rows drawn next
+      for (const s of queue) asked.current.delete(s);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stacks are read through `key`
   }, [key]);
   return names;
 }

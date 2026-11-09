@@ -1,11 +1,14 @@
+// @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // A campaign's page as an app page (UX round 5, finding 7): the head's words,
 // the one next action for each state through the fixtures, people by name
 // with the principal cut short on hover and never a whole hash, each item
 // named by its scan, and each answer as a value word.
 
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import closedCampaign from "../../test/fixtures/campaigns/campaign_closed.json";
 import openCampaign from "../../test/fixtures/campaigns/campaign_open.json";
 import answersOpen from "../../test/fixtures/campaigns/answers_open.json";
@@ -172,5 +175,67 @@ describe("items named by their scan, answers as value words", () => {
     expect(html).not.toContain("like_post");
     expect(html).not.toContain("null");
     expect(html).not.toContain("anchored:0</");
+  });
+});
+
+describe("the rows' names, read from each stack's header", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+  const until = async (what: () => boolean, ms = 3000) => {
+    const end = Date.now() + ms;
+    while (!what()) {
+      if (Date.now() > end) throw new Error("not in time");
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+      });
+    }
+  };
+
+  it("reads each stack's header once, six at a time, and names its row as the names land", async () => {
+    // eight stacks: six reads go out at once, two wait; each answer lands at its own time, so the rows are drawn
+    // again while reads are still out, and no stack is asked twice for it
+    const stacks = [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008];
+    const items: Item[] = stacks.map((stack, k) => ({ ...open.items![0], id: 900 + k, position: k, stack_id: stack, key: `anchored:${k}`, outcome: null, agreement: null }));
+    const c: Campaign = { ...open, question: { kind: "anchored", axis: "post_contrast" }, items, counts: { items: { open: items.length }, assignments: {}, answers: 0 } };
+    const log: string[] = [];
+    let outAtOnce = 0;
+    let mostAtOnce = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      log.push(url);
+      const m = /\/api\/stacks\/(\d+)\/header$/u.exec(url);
+      if (!m) return new Response(JSON.stringify({ error: `no door ${url}` }), { status: 404 });
+      outAtOnce += 1;
+      mostAtOnce = Math.max(mostAtOnce, outAtOnce);
+      await new Promise((r) => setTimeout(r, 2 + (Number(m[1]) % 4) * 3));
+      outAtOnce -= 1;
+      return new Response(JSON.stringify({ stack: Number(m[1]), texts: { series_description: `series ${m[1]}` } }), { status: 200 });
+    });
+    const caps = capsFor({ grants: ADMIN, doors: [...DOORS, "GET /api/stacks/{stack}/header"] });
+    await act(async () => root.render(<CampaignBody caps={caps} campaign={c} answers={[]} answersBlind={false} sets={[]} onAct={none} />));
+    await until(() => [...host.querySelectorAll(".item-name")].every((e) => e.textContent?.startsWith("series ")));
+    const names = [...host.querySelectorAll<HTMLElement>(".item-name")].map((e) => [e.title, e.textContent]);
+    expect(names).toEqual(stacks.map((s) => [`stack ${s}`, `series ${s}`]));
+    // one read a stack, no more
+    const headers = log.filter((u) => u.endsWith("/header")).sort();
+    expect(headers).toEqual(stacks.map((s) => `/api/stacks/${s}/header`));
+    expect(mostAtOnce).toBe(6);
+    // the rows drawn again with the same stacks: nothing is read again
+    await act(async () => root.render(<CampaignBody caps={caps} campaign={c} answers={[]} answersBlind={false} sets={[]} onAct={none} />));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(log.filter((u) => u.endsWith("/header"))).toHaveLength(stacks.length);
   });
 });
