@@ -143,33 +143,76 @@ printf '\n NILS %s for %s\n' "$version" "$target"
 
 # The binary, with a bar when there is a terminal to draw it on: its size is
 # asked first, and the file is measured as it arrives.
+#
+# A download that fails is said as what it is. GitHub's asset host answered
+# 504 once for a release that held the binary, and this script blamed the
+# release ("no binary for linux-x86_64"). Now only a 404 means the release
+# has no binary for the machine; anything else is tried three times, with a
+# pause between, and then said with its code and what to do.
 url="$base/nils-$target"
+codefile="$tmp.code"
+
+# fetch: the binary into $tmp, up to three tries; the last HTTP code goes to
+# $codefile. Returns 0 when it is there, 44 when the release has no such file,
+# 1 when the download failed every time.
+fetch() {
+  n=0
+  while :; do
+    n=$((n + 1))
+    code=$(curl -sSL --connect-timeout 15 --max-time 900 -w '%{http_code}' "$url" -o "$tmp" 2>/dev/null) || code="${code:-000}"
+    printf '%s\n' "$code" > "$codefile"
+    case "$code" in
+      2??) return 0 ;;
+      404) rm -f "$tmp"; return 44 ;;
+    esac
+    rm -f "$tmp"
+    [ "$n" -ge 3 ] && return 1
+    sleep $((n * 3))
+  done
+}
+
+# What a failed fetch means, by its return.
+fetch_failed() {
+  code=$(cat "$codefile" 2>/dev/null || true)
+  rm -f "$tmp" "$codefile"
+  if [ "$1" = 44 ]; then
+    die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"
+  fi
+  case "$code" in
+    000|"") why="no answer from $REL" ;;
+    *) why="HTTP $code from $REL" ;;
+  esac
+  die "the download of nils-$target from release $version failed three times ($why); the release holds it, so run this again in a minute. If it keeps failing, see https://kineuro.se/nils/docs/"
+}
+
 total=0
 if [ "$live" = 1 ]; then
   total=$(curl -fsIL --connect-timeout 15 --max-time 60 "$url" 2>/dev/null \
     | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')
 fi
-if [ "$live" = 1 ] && [ "${total:-0}" -gt 0 ]; then
-  curl -fsSL --connect-timeout 15 --max-time 900 "$url" -o "$tmp" &
+# No nils binary is under a megabyte: a smaller size is an error page's, and
+# then there is nothing to draw a bar against.
+if [ "$live" = 1 ] && [ "${total:-0}" -gt 1048576 ]; then
+  fetch &
   pid=$!
   width=28
   while kill -0 "$pid" 2>/dev/null; do
     got=$(wc -c < "$tmp" 2>/dev/null | tr -d ' ')
-    bar "$got" "$total" "$width"
+    bar "${got:-0}" "$total" "$width"
     sleep 0.2
   done
   if wait "$pid"; then
     bar "$total" "$total" "$width"
     printf '\n'
   else
+    rc=$?
     printf '\n'
-    rm -f "$tmp"
-    die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"
+    fetch_failed "$rc"
   fi
 else
-  curl -fsSL --connect-timeout 15 --max-time 900 "$url" -o "$tmp" \
-    || { rm -f "$tmp"; die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"; }
+  fetch || fetch_failed "$?"
 fi
+rm -f "$codefile"
 
 want=$(curl -fsSL --connect-timeout 15 --max-time 120 "$base/SHA256SUMS" 2>/dev/null | grep " nils-$target\$" | awk '{print $1}' || true)
 if [ -n "$want" ]; then
