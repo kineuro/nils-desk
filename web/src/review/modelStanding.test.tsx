@@ -175,7 +175,7 @@ describe("the Proposals page", () => {
     expect(host.querySelector(".said")?.textContent).toBe("Committed 1,204 body part answers · 1,204 of 1,204 sorted again");
     expect(jobReads).toBe(2);
     // what is left: the campaign of the rest alone
-    expect([...host.querySelectorAll(".proposal-card button")].map((b) => b.textContent)).toEqual(["Make a campaign of the other 4,838 for me"]);
+    expect([...host.querySelectorAll(".proposal-card button")].map((b) => b.textContent)).toEqual(["Make a campaign of the 4,838 for me"]);
   });
 
   it("says an older engine's re-sort words as they come", async () => {

@@ -56,7 +56,7 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator("dialog[open]")).toHaveCount(0);
       await expect(page.locator(".said")).toContainText("Committed 1,204 body part answers");
       await expect(page.locator(".said")).toHaveText("Committed 1,204 body part answers · 1,204 of 1,204 sorted again", { timeout: 15000 });
-      await expect(page.locator(".proposal-card").first().getByRole("button")).toHaveText(["Make a campaign of the other 4,838 for me"]);
+      await expect(page.locator(".proposal-card").first().getByRole("button")).toHaveText(["Make a campaign of the 4,838 for me"]);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/proposals-after-${vp.name}.png`, fullPage: true });
     });

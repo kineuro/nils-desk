@@ -75,7 +75,7 @@ const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
   rules: { title: "Rules", lede: "The pack decides every answer. One fix to a rule mends every scan it touches." },
   identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two subject codes share." },
   picks: { title: "Which scan stands for a role", lede: "Occasions a pick run doubts. A person's pick stands through every later run." },
-  proposals: { title: "What models proposed", lede: "Commit what each model is sure of; read the rest in a campaign of your own." },
+  proposals: { title: "What models proposed", lede: "Commit what each model is sure of; review the rest as a grid, or read them in a campaign of your own." },
   asked: { title: "What System 1 asks", lede: "Legal candidates for a whole stack, most probable first." },
 };
 

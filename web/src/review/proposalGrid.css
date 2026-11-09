@@ -72,3 +72,7 @@
   .pg-size { margin-left: 0; }
   .pgrid-page .qgrid-head .pg-state { white-space: normal; }
 }
+
+/* a read under way keeps the grid on screen under a veil (the handles' release asked one read) */
+.pgrid-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pg-veil { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 1.5rem; background: var(--n-scrim); border-radius: var(--n-radius); }

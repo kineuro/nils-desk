@@ -47,7 +47,8 @@
 .q-pop .opt { min-height: 1.4rem; padding: 0 0.4rem; font-size: 12px; }
 .q-pop .q-pop-for { flex-basis: 100%; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qgrid-bar > .q-pop { top: calc(100% + 0.25rem); left: 0.55rem; max-width: calc(100% - 1.1rem); }
-.q-tile > .q-pop { inset: 0.3rem 0.3rem auto 0.3rem; max-height: calc(100% - 0.6rem); overflow: auto; }
+/* the list grows past its tile (the modifier axis has twelve values); the grid scrolls where it must */
+.q-tile > .q-pop { inset: 0.3rem 0.3rem auto 0.3rem; }
 
 .qgrid-said { margin: 0; }
 .qgrid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 0.5rem; align-content: start; padding: 2px; }
