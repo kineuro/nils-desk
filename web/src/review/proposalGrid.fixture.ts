@@ -2,7 +2,8 @@
 // Fixtures of the batch accept grid's doors (UX round 5), in the shapes the
 // engine answers: a body-part model's unsure proposals, three values (neck,
 // spine, brain) over a band below its threshold, paged; and what the accept
-// door says. The pictures are small grey discs. Every value is made up.
+// door says, corrections counted (UX round 6, item 4). The pictures are
+// small grey discs. Every value is made up.
 
 import type { Json } from "../ask/client";
 import { picture } from "./questions.fixture";
@@ -11,6 +12,9 @@ export const MODEL = { id: 12, name: "bodypart-cascade", version: "r7-fast", dig
 
 /** The counts by value in the band below the threshold. */
 export const VALUES: Record<string, number> = { neck: 41212, spine: 30180, brain: 2740 };
+
+/** The axis's legal values from the served pack, as the engine says them. */
+export const LEGAL = ["brain", "brain-neck", "chest", "neck", "spine"];
 
 /** Ten bands over the model's range, most of the mass in the middle. */
 export function bands(value: string | null): Json[] {
@@ -45,8 +49,11 @@ export function gscan(stack: number, value: string, k: number, over: Json = {}):
   };
 }
 
-/** A page of the scans door: `size` scans of `value` (the first decided by a person), or of every value where none is asked. */
-export function gpage(opts: { value?: string | null; min?: number | null; max?: number | null; page?: number; size?: number; total?: number } = {}): Json {
+/**
+ * A page of the scans door: `size` scans of `value` (the first decided by a person), or of every value where none is
+ * asked; with the axis's legal values, unless `legal` is null (an engine before them).
+ */
+export function gpage(opts: { value?: string | null; min?: number | null; max?: number | null; page?: number; size?: number; total?: number; legal?: string[] | null } = {}): Json {
   const value = opts.value ?? null;
   const size = opts.size ?? 500;
   const page = opts.page ?? 1;
@@ -73,6 +80,7 @@ export function gpage(opts: { value?: string | null; min?: number | null; max?: 
     asked: 0,
     withheld_sealed: 0,
     pictures: { shown: true, why: null, missing: 0, partial: 0 },
+    ...(opts.legal === null ? {} : { legal: opts.legal ?? LEGAL }),
     scans: Array.from({ length: shown }, (_, k) => {
       const i = (page - 1) * size + k;
       const stack = 1000 + i;
@@ -81,21 +89,33 @@ export function gpage(opts: { value?: string | null; min?: number | null; max?: 
   };
 }
 
-/** What the accept door says after a page. */
-export function accepted(body: { seen: number[]; except: number[]; value: string }, job = 356): Json {
-  const written = body.seen.filter((s) => !body.except.includes(s) && s !== 1000);
+/** The accept door's body, as the fixture reads it. */
+export interface AcceptSent {
+  seen: number[];
+  except: number[];
+  value: string;
+  min?: number;
+  max?: number;
+  corrections?: { stack: number; value: string }[];
+}
+
+/** What the accept door says after a page: the model's value on the rest, the person's on the corrections. */
+export function accepted(body: AcceptSent, job = 356): Json {
+  const corrected = (body.corrections ?? []).map((c) => c.stack).filter((s) => body.seen.includes(s) && s !== 1000);
+  const written = body.seen.filter((s) => !body.except.includes(s) && !corrected.includes(s) && s !== 1000);
   return {
     model: MODEL,
     label: `${MODEL.name}@${MODEL.version}`,
     axis: "body_part",
     value: body.value,
     decided: written.length,
-    decisions: written.map((s, i) => ({ stack: s, decision: 7000 + i })),
+    corrected: corrected.length,
+    decisions: [...written, ...corrected].map((s, i) => ({ stack: s, decision: 7000 + i })),
     closed: written.length > 0 ? [903] : [],
     left_in_items: 12,
     kept_decided: body.seen.includes(1000) && !body.except.includes(1000) ? 1 : 0,
     left_out_sealed: 0,
     set_apart: body.except.length,
-    resort: written.length > 0 ? { job, state: "queued", stacks: written.length } : { job: null, state: "done", stacks: 0 },
+    resort: written.length + corrected.length > 0 ? { job, state: "queued", stacks: written.length + corrected.length } : { job: null, state: "done", stacks: 0 },
   };
 }

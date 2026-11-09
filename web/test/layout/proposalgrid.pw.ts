@@ -7,7 +7,9 @@
 // phone) and each is framed in the proposed value's colour; a click sets a
 // scan apart, a shift-click a range, space the focused one; Enter accepts
 // the page but the exceptions, the line says what was written and the job,
-// and the next page loads; nothing scrolls sideways. SHOTS=<dir> keeps a
+// and the next page loads; a set-apart tile takes its value from the axis's
+// list, opened over it by 0 or its corner, and Accept writes the correction
+// (UX round 6, item 4); nothing scrolls sideways. SHOTS=<dir> keeps a
 // screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -119,6 +121,61 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".pg-tile.apart")).toHaveCount(0);
       await noSidewaysScroll(page, vp.width);
       await shot(page, `proposalgrid-accepted-${vp.name}`);
+    });
+
+    test("a set-apart tile takes its value: 0 opens the axis's list over it, the pick frames and names it, Accept writes the correction beside the rest", async ({ page }) => {
+      await page.goto("/proposalgrid.html#review/proposals/12/body_part");
+      await expect(page.locator(".pg-tile")).toHaveCount(500);
+      await expect(page.locator(".pg-foot .q-help")).toContainText("0other value");
+      const tile = page.locator('.pg-tile[data-stack="1003"]');
+      await tile.click();
+      await expect(tile.locator(".pg-corner")).toHaveText("apart");
+      await page.locator("body").click({ position: { x: 2, y: 2 } });
+      await page.keyboard.press("0");
+      const pop = tile.locator(".q-pop");
+      await expect(pop).toBeVisible();
+      await expect(pop.locator(".q-pop-for")).toHaveText("scan 1003 · body part");
+      await expect(pop.getByRole("button")).toHaveText(["brain", "brain-neck", "chest", "neck", "spine"]);
+      const pb = (await pop.boundingBox())!;
+      expect(pb.x).toBeGreaterThanOrEqual(0);
+      expect(pb.x + pb.width).toBeLessThanOrEqual(vp.width);
+      await shot(page, `proposalgrid-list-${vp.name}`);
+      // the pick: the tile takes the value's frame and word; the button and the tally count it
+      await pop.getByRole("button", { name: "brain", exact: true }).click();
+      await expect(pop).toHaveCount(0);
+      await expect(tile).toHaveClass(/corrected/);
+      await expect(tile.locator(".pg-corner")).toHaveText("brain");
+      await expect(tile).toHaveAttribute("data-slot", "1");
+      await expect(page.locator('.pg-tile[data-stack="1004"]')).toHaveAttribute("data-slot", "2");
+      await expect(page.getByRole("button", { name: /^Accept 498 as neck · 1 corrected/u })).toBeVisible();
+      await expect(page.locator(".pg-foot .q-tally")).toContainText("1 corrected (1 brain)");
+      // the last tile of the first row: its list opens within the grid, leftward; with two set apart, for both
+      const boxes = await page.locator(".pg-tile").evaluateAll((els) => els.slice(0, 24).map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
+      const columns = boxes.filter((b) => Math.round(b.top) === Math.round(boxes[0].top)).length;
+      const last = page.locator(`.pg-tile[data-stack="${1000 + columns - 1}"]`);
+      await last.click();
+      await last.locator(".pg-corner").click();
+      const pop2 = last.locator(".q-pop");
+      await expect(pop2).toBeVisible();
+      await expect(pop2.locator(".q-pop-for")).toContainText("the 2 set apart");
+      const gb = (await page.locator(".pgrid").boundingBox())!;
+      const pb2 = (await pop2.boundingBox())!;
+      expect(pb2.x + pb2.width).toBeLessThanOrEqual(Math.max(gb.x + gb.width, vp.width) + 1);
+      await noSidewaysScroll(page, vp.width);
+      await shot(page, `proposalgrid-corrected-${vp.name}`);
+      await page.keyboard.press("Escape");
+      await expect(pop2).toHaveCount(0);
+      await last.click();
+      await expect(last).not.toHaveClass(/apart/);
+      // Enter: the correction goes with the body, out of except; the line says both
+      await page.locator("body").click({ position: { x: 2, y: 2 } });
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".qgrid-said")).toContainText("Accepted 498 as neck and corrected 1 (1 brain) in your name");
+      const posted = await page.evaluate(() => (window as unknown as { posted: { seen: number[]; except: number[]; corrections?: { stack: number; value: string }[] }[] }).posted);
+      expect(posted).toHaveLength(1);
+      expect(posted[0].except).toEqual([]);
+      expect(posted[0].corrections).toEqual([{ stack: 1003, value: "brain" }]);
+      await expect(page.locator(".pg-tile.corrected")).toHaveCount(0);
     });
   });
 }

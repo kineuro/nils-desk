@@ -3,10 +3,13 @@
    dense, about a hundred pixels a picture on a laptop and five a row on a
    phone, each framed in the proposed value's colour (the theme's value
    tokens through data-slot, as the question grid and the gallery). A scan
-   set apart takes the caution frame; one a person decided is dashed and
-   steps back. The probability shows in a corner on hover. The filter row
-   above: value chips with counts, the confidence histogram with two handles,
-   the size. One primary button under the grid. Theme tokens only. */
+   set apart takes the caution frame and the word apart in its corner; one
+   corrected takes the person's value's frame and that word (UX round 6,
+   item 4), and the corner opens the axis's value list, the question grid's
+   popover, over the tile; one a person decided is dashed and steps back.
+   The probability shows in a corner on hover. The filter row above: value
+   chips with counts, the confidence histogram with two handles, the size.
+   One primary button under the grid. Theme tokens only. */
 
 .pgrid-page .qgrid-head .pg-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
@@ -53,6 +56,17 @@
 .pg-tile:hover .pg-p, .pg-tile.focused .pg-p { opacity: 0.95; }
 .pg-mark { position: absolute; left: 0.2rem; top: 0.15rem; padding: 0 0.3rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: 11px; line-height: 1.4; }
 .pg-mark.pg-decided { border-color: var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); }
+/* the corner is a button where the engine offers the value list: the same mark, pressable */
+.pg-mark.pg-corner { appearance: none; -webkit-appearance: none; margin: 0; font-family: inherit; font-weight: inherit; cursor: pointer; }
+.pg-mark.pg-corner:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+/* corrected: the person's value's frame, thick, the picture in full, and the value word in its colour */
+.pg-tile.corrected[data-slot] { box-shadow: inset 0 0 0 2px var(--vc); }
+.pg-mark.pg-value[data-slot] { border-color: var(--vc); border-left: 3px solid var(--vc); background: var(--vc-bg); color: var(--n-text); font-weight: 600; }
+/* the value list open over a tile: the tile lets it out and comes to the front; at the grid's right edge it opens
+   leftward; on a phone it sits over the bottom of the window, where a thumb reaches */
+.pg-tile.listing { overflow: visible; z-index: 7; }
+.pg-tile > .q-pop { left: 0; top: 0; width: max-content; max-width: min(22rem, 70vw); }
+.pg-tile > .q-pop.flip { left: auto; right: 0; }
 
 /* ------------------------------------------------------------ the foot */
 .pg-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.8rem; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
@@ -68,6 +82,7 @@
   .pg-tile img { height: auto; aspect-ratio: 1; }
   .pg-tile .q-blank { height: auto; aspect-ratio: 1; }
   .pg-foot .q-help { display: none; }
+  .pg-tile > .q-pop, .pg-tile > .q-pop.flip { position: fixed; left: 1rem; right: 1rem; top: auto; bottom: 1rem; width: auto; max-width: none; }
   .pg-hist { width: 100%; }
   .pg-size { margin-left: 0; }
   .pgrid-page .qgrid-head .pg-state { white-space: normal; }

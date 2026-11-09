@@ -5,15 +5,17 @@
 // answers the two grid doors as the engine's do: three values below the
 // threshold, ten bands over the model's range, five hundred scans a page
 // (small grey discs), and an accept that says what it wrote and the job the
-// re-sort runs as. What the accept door was sent is kept on the window for
-// proposalgrid.pw.ts to read. Every name and number is made up.
+// re-sort runs as, corrections counted; the page carries the axis's legal
+// values, so a set-apart tile takes a value. What the accept door was sent
+// is kept on the window for proposalgrid.pw.ts to read. Every name and
+// number is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../../src/App";
 import "../../src/shell.css";
 import { GRANTS } from "../../src/grants";
-import { accepted, gpage, MODEL, VALUES } from "../../src/review/proposalGrid.fixture";
+import { accepted, type AcceptSent, gpage, MODEL, VALUES } from "../../src/review/proposalGrid.fixture";
 
 const DOORS = [
   "GET /api/capabilities",
@@ -76,10 +78,10 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     return json(200, gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total }));
   }
   if (path === "/api/review/proposals/accept") {
-    const body = JSON.parse(String(init?.body)) as { seen: number[]; except: number[]; value: string };
+    const body = JSON.parse(String(init?.body)) as AcceptSent;
     w.posted.push(body);
     const a = accepted(body);
-    w.accepted += a.decided as number;
+    w.accepted += (a.decided as number) + (a.corrected as number);
     return json(200, a);
   }
   // the re-sort job the accept queued: half way on the first read, over on the next

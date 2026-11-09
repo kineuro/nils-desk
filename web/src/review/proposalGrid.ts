@@ -4,10 +4,14 @@
 // proposals on one axis by the value proposed and by the model's confidence,
 // sees the scans densely, about five hundred at a time, sets only the wrong
 // ones apart, and accepts the rest in one move, in their own name with the
-// model's probability kept beside each decision. The rules' question grid
-// (./questions.ts) is the seed: the same pictures, the same page shape, the
-// same keys. Everything here is pure, so the page and its tests read one
-// shape; the component is ProposalGrid.tsx.
+// model's probability kept beside each decision. A set-apart scan the person
+// can name takes its right value (UX round 6, item 4): 0 or the tile's
+// corner opens the axis's value list once, the pick frames the tile in that
+// value's colour, and the one Accept writes the model's value on the rest
+// and the person's on the corrected, as corrections of the proposal. The
+// rules' question grid (./questions.ts) is the seed: the same pictures, the
+// same page shape, the same keys. Everything here is pure, so the page and
+// its tests read one shape; the component is ProposalGrid.tsx.
 
 import { door, DoorError, type JobRow, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -101,6 +105,8 @@ export interface GPage {
   asked: number;
   withheldSealed: number;
   pictures: { shown: boolean; why: string | null } | null;
+  /** The axis's legal values from the served pack; empty on an engine before them, and then no correction is offered. */
+  legal: string[];
   scans: GScan[];
 }
 
@@ -109,6 +115,8 @@ export interface Accepted {
   axis: string;
   value: string;
   decided: number;
+  /** Scans written with the person's value in place of the model's. */
+  corrected: number;
   decisions: { stack: number; decision: number }[];
   closed: number[];
   leftInItems: number;
@@ -175,6 +183,7 @@ export function pageOf(raw: Json): GPage {
     asked: num(raw.asked) ?? 0,
     withheldSealed: num(raw.withheld_sealed) ?? 0,
     pictures: pictures ? { shown: pictures.shown === true, why: str(pictures.why) } : null,
+    legal: Array.isArray(raw.legal) ? raw.legal.filter((v): v is string => typeof v === "string" && v !== "") : [],
     scans,
   };
 }
@@ -186,6 +195,7 @@ export function acceptedOf(raw: Json): Accepted {
     axis: str(raw.axis) ?? "",
     value: str(raw.value) ?? "",
     decided: num(raw.decided) ?? 0,
+    corrected: num(raw.corrected) ?? 0,
     decisions: (Array.isArray(raw.decisions) ? (raw.decisions as Json[]) : []).flatMap((d) => (num(d.stack) !== null ? [{ stack: d.stack as number, decision: num(d.decision) ?? 0 }] : [])),
     closed: Array.isArray(raw.closed) ? raw.closed.filter((c): c is number => typeof c === "number") : [],
     leftInItems: num(raw.left_in_items) ?? 0,
@@ -257,6 +267,8 @@ export interface AcceptBody extends Json {
   max?: number;
   seen: number[];
   except: number[];
+  /** Scans among `seen` that get the person's value instead of the model's; never in `except`. Left out when none. */
+  corrections?: { stack: number; value: string }[];
 }
 
 export const grid = {
@@ -269,26 +281,94 @@ export const grid = {
 
 export interface GridState {
   page: GPage;
-  /** The scans set apart: they stay proposals. */
+  /** The scans set apart: they stay proposals, unless a correction names their value. */
   apart: Record<number, true>;
+  /** The person's value for a set-apart scan: Accept writes it in place of the model's. */
+  corrections: Record<number, string>;
   /** The scan the keys act on. */
   focus: number | null;
   /** The last scan clicked, for a shift-click's range. */
   anchor: number | null;
+  /** The value list open over one scan, or for every scan set apart; null for closed. */
+  listing: number | "apart" | null;
 }
 
 /** A page's first state: nothing set apart, the focus on the first scan. */
 export function gridOf(page: GPage): GridState {
-  return { page, apart: {}, focus: page.scans[0]?.stack ?? null, anchor: null };
+  return { page, apart: {}, corrections: {}, focus: page.scans[0]?.stack ?? null, anchor: null, listing: null };
 }
 
-/** Set a scan apart, or put it back with the rest; it becomes the focus and the range's anchor. */
+/** Whether the page offers a correction: the engine said what values the axis takes. */
+export function corrects(s: Pick<GridState, "page">): boolean {
+  return s.page.legal.length > 0;
+}
+
+/**
+ * A click: set a scan apart, or put it back with the rest; a corrected scan goes back to the model's proposal (its
+ * correction is dropped). It becomes the focus and the range's anchor, and an open list closes.
+ */
 export function toggleApart(s: GridState, stack: number): GridState {
   if (!s.page.scans.some((x) => x.stack === stack)) return s;
   const apart = { ...s.apart };
-  if (stack in apart) delete apart[stack];
+  const corrections = { ...s.corrections };
+  if (stack in corrections) {
+    delete corrections[stack];
+    delete apart[stack];
+  } else if (stack in apart) delete apart[stack];
   else apart[stack] = true;
-  return { ...s, apart, focus: stack, anchor: stack };
+  return { ...s, apart, corrections, focus: stack, anchor: stack, listing: null };
+}
+
+/** Space: a corrected scan stays set apart with no value; any other is set apart or put back as a click does. */
+export function spaceApart(s: GridState, stack: number): GridState {
+  return stack in s.corrections ? dropCorrection(s, stack) : toggleApart(s, stack);
+}
+
+/** The person's value for a set-apart scan; nothing for a scan not on the page or a value the axis does not take. */
+export function setCorrection(s: GridState, stack: number, value: string): GridState {
+  if (!s.page.scans.some((x) => x.stack === stack) || !s.page.legal.includes(value)) return s;
+  return { ...s, apart: { ...s.apart, [stack]: true }, corrections: { ...s.corrections, [stack]: value } };
+}
+
+/** The correction dropped: the scan stays set apart with no value. */
+export function dropCorrection(s: GridState, stack: number): GridState {
+  if (!(stack in s.corrections)) return s;
+  const corrections = { ...s.corrections };
+  delete corrections[stack];
+  return { ...s, corrections, focus: stack, anchor: stack };
+}
+
+/** The scans set apart, in the page's order. */
+export function apartOf(s: GridState): number[] {
+  return s.page.scans.filter((x) => x.stack in s.apart).map((x) => x.stack);
+}
+
+/**
+ * 0 or a tile's corner: the value list opens for that scan (the focused one where none is named), or for every scan
+ * set apart where several are and the focus is one of them; a scan not set apart is set apart in the same move.
+ * Again closes it. Nothing where the engine said no values.
+ */
+export function openList(s: GridState, forStack: number | null = null): GridState {
+  if (!corrects(s)) return s;
+  const focus = forStack ?? s.focus;
+  if (focus === null || !s.page.scans.some((x) => x.stack === focus)) return s;
+  const apart: Record<number, true> = focus in s.apart ? s.apart : { ...s.apart, [focus]: true as const };
+  const want: number | "apart" = focus in s.apart && Object.keys(s.apart).length > 1 ? "apart" : focus;
+  return { ...s, apart, focus, anchor: focus, listing: s.listing === want ? null : want };
+}
+
+/** The list's pick: the value for what the list is open for; the list closes. */
+export function chooseValue(s: GridState, value: string): GridState {
+  if (s.listing === null) return s;
+  let out: GridState = { ...s, listing: null };
+  if (s.listing === "apart") for (const stack of apartOf(s)) out = setCorrection(out, stack, value);
+  else out = setCorrection(out, s.listing, value);
+  return out;
+}
+
+/** The list closed, nothing chosen. */
+export function closeList(s: GridState): GridState {
+  return s.listing === null ? s : { ...s, listing: null };
 }
 
 /** Set apart every scan from the anchor to this one (a shift-click); with no anchor, this one alone. */
@@ -300,7 +380,7 @@ export function rangeApart(s: GridState, stack: number): GridState {
   const [a, b] = from <= to ? [from, to] : [to, from];
   const apart = { ...s.apart };
   for (let i = a; i <= b; i++) apart[list[i].stack] = true;
-  return { ...s, apart, focus: stack };
+  return { ...s, apart, focus: stack, listing: null };
 }
 
 /** The focus moved by some scans, held to the page. */
@@ -317,15 +397,35 @@ export function accepting(s: GridState): GScan[] {
   return s.page.scans.filter((x) => !(x.stack in s.apart) && !x.decided);
 }
 
-/** How the page stands: what Accept writes, how many are set apart, how many a person decided. */
-export function tally(s: GridState): { accept: number; apart: number; decided: number; total: number } {
-  return { accept: accepting(s).length, apart: Object.keys(s.apart).length, decided: s.page.scans.filter((x) => x.decided).length, total: s.page.scans.length };
+/** The scans corrected, in the page's order, each with the person's value. */
+export function correctionsOf(s: GridState): { stack: number; value: string }[] {
+  return s.page.scans.filter((x) => x.stack in s.corrections).map((x) => ({ stack: x.stack, value: s.corrections[x.stack] }));
 }
 
-/** The accept door's body for the page as it stands: every scan shown, the set-apart ones as exceptions; null without a value. */
+/** The corrected values and their counts, most first, then by name: `[["brain", 2], ["neck", 1]]`. */
+export function correctedCounts(s: GridState): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const { value } of correctionsOf(s)) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+/**
+ * How the page stands: what Accept writes as the model's value, how many take the person's, how many are set apart
+ * with no value (they stay proposals), how many a person decided.
+ */
+export function tally(s: GridState): { accept: number; corrected: number; apart: number; decided: number; total: number } {
+  const corrected = Object.keys(s.corrections).length;
+  return { accept: accepting(s).length, corrected, apart: Object.keys(s.apart).length - corrected, decided: s.page.scans.filter((x) => x.decided).length, total: s.page.scans.length };
+}
+
+/**
+ * The accept door's body for the page as it stands: every scan shown, the set-apart ones without a value as
+ * exceptions, the corrected ones with the person's value (never in `except`); null without a value.
+ */
 export function acceptBody(s: GridState, f: Filter): AcceptBody | null {
   const value = s.page.value ?? f.value;
   if (!value || s.page.scans.length === 0) return null;
+  const corrections = corrects(s) ? correctionsOf(s) : [];
   return {
     model: String(s.page.model.id),
     axis: s.page.axis,
@@ -333,11 +433,12 @@ export function acceptBody(s: GridState, f: Filter): AcceptBody | null {
     ...(f.min !== null ? { min: f.min } : {}),
     ...(f.max !== null ? { max: f.max } : {}),
     seen: s.page.scans.map((x) => x.stack),
-    except: s.page.scans.filter((x) => x.stack in s.apart).map((x) => x.stack),
+    except: s.page.scans.filter((x) => x.stack in s.apart && !(x.stack in s.corrections)).map((x) => x.stack),
+    ...(corrections.length > 0 ? { corrections } : {}),
   };
 }
 
-export type GridAct = { kind: "apart" } | { kind: "apply" } | { kind: "move"; by: number } | { kind: "full" } | { kind: "back" } | { kind: "none" };
+export type GridAct = { kind: "apart" } | { kind: "list" } | { kind: "apply" } | { kind: "move"; by: number } | { kind: "full" } | { kind: "back" } | { kind: "none" };
 
 /** What a key does on the grid. `columns` is how many scans a row holds now, for up and down. */
 export function keyAct(key: string, columns = 1): GridAct {
@@ -345,6 +446,8 @@ export function keyAct(key: string, columns = 1): GridAct {
   switch (key) {
     case " ":
       return { kind: "apart" };
+    case "0":
+      return { kind: "list" };
     case "Enter":
       return { kind: "apply" };
     case "ArrowRight":
@@ -382,15 +485,25 @@ export function stateLine(page: GPage, f: Filter): string {
   return `page ${nf(page.page)} of ${nf(page.pages)} · ${what}`;
 }
 
-/** The primary button: `Accept 497 as neck`. */
-export function acceptWords(s: GridState, f: Filter): string {
-  const value = s.page.value ?? f.value ?? "the value";
-  return `Accept ${nf(tally(s).accept)} as ${value}`;
+/** The corrected values in words: `2 brain, 1 neck`; empty for none. */
+export function correctedWords(s: GridState): string {
+  return correctedCounts(s)
+    .map(([v, c]) => `${nf(c)} ${v}`)
+    .join(", ");
 }
 
-/** What the accept did, before the re-sort: what was written, set apart, kept and closed. */
+/** The primary button: `Accept 497 as neck`, and `· 3 corrected` where set-apart scans took a value. */
+export function acceptWords(s: GridState, f: Filter): string {
+  const value = s.page.value ?? f.value ?? "the value";
+  const t = tally(s);
+  return `Accept ${nf(t.accept)} as ${value}${t.corrected > 0 ? ` · ${nf(t.corrected)} corrected` : ""}`;
+}
+
+/** What the accept did, before the re-sort: what was written as the model's value and as the person's, set apart, kept and closed. */
 function acceptedHead(a: Accepted, s: GridState | null): string[] {
-  const parts = [`Accepted ${nf(a.decided)} as ${a.value} in your name`];
+  const values = s && a.corrected > 0 ? correctedWords(s) : "";
+  const corrected = a.corrected > 0 ? ` and corrected ${nf(a.corrected)}${values ? ` (${values})` : ""}` : "";
+  const parts = [`Accepted ${nf(a.decided)} as ${a.value}${corrected} in your name`];
   const apart = s ? tally(s).apart : a.setApart;
   if (apart > 0) parts.push(`${nf(apart)} set apart ${apart === 1 ? "stays a proposal" : "stay proposals"}`);
   if (a.keptDecided > 0) parts.push(`${nf(a.keptDecided)} ${a.keptDecided === 1 ? "keeps" : "keep"} a person's decision`);
@@ -428,14 +541,27 @@ export function refusedWords(e: unknown): { words: string; stale: boolean } {
   return { words: e instanceof Error ? e.message : String(e), stale: false };
 }
 
-/** A tile's hover: the scan's name, the value now and the probability. */
-export function tileTitle(x: GScan): string {
-  return [x.name ?? x.description ?? `scan ${x.stack}`, `now ${x.now ?? "no value"}`, `${x.proposed} ${p2(x.probability)}`, x.decided ? "decided by a person" : null, x.subject?.code ? `subject ${x.subject.code}` : null].filter(Boolean).join(" · ");
+/** A tile's hover: the scan's name, the value now, the probability, and the person's value where one is set. */
+export function tileTitle(x: GScan, correction: string | null = null): string {
+  return [x.name ?? x.description ?? `scan ${x.stack}`, `now ${x.now ?? "no value"}`, `${x.proposed} ${p2(x.probability)}`, correction ? `your value ${correction}` : null, x.decided ? "decided by a person" : null, x.subject?.code ? `subject ${x.subject.code}` : null].filter(Boolean).join(" · ");
 }
 
-/** The values the colours are slotted by: the page's values in name order, so a value keeps its colour across pages. */
+/**
+ * The values the colours are slotted by: the page's values in name order, so a value keeps its colour across pages,
+ * then the others as they come (the filter's value, the values corrected to), each on the next slot.
+ */
 export function slots(values: readonly ValueCount[], extra: readonly string[] = []): string[] {
   const out = values.map((v) => v.value).sort((a, b) => a.localeCompare(b));
-  for (const v of extra) if (!out.includes(v)) out.push(v);
+  for (const v of extra) if (v && !out.includes(v)) out.push(v);
   return out;
+}
+
+/**
+ * The colour slots for a page as it stands: the page's values, the filter's, the values corrected to and then the
+ * axis's other legal values, the last two in the pack's order, so a corrected value's colour holds while the page is
+ * worked (the slots run out after ten: a value past them keeps its word and a plain frame).
+ */
+export function paletteOf(s: GridState): string[] {
+  const used = new Set(Object.values(s.corrections));
+  return slots(s.page.values, [s.page.value ?? "", ...s.page.legal.filter((v) => used.has(v)), ...s.page.legal]);
 }

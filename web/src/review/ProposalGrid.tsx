@@ -7,9 +7,15 @@
 // one; one primary button accepts the page but the exceptions, in the
 // person's name with the model's probability beside each decision, and the
 // next page loads. Nothing about the exceptions is written. One quiet line
-// says where the page stands. No dialog.
+// says where the page stands. No dialog. UX round 6, item 4: a set-apart
+// scan the person can name takes its value: 0 or the tile's corner opens the
+// axis's value list once over the tile (the question grid's popover), for
+// that scan or for every scan set apart, the pick frames the tile in the
+// value's colour with the word in its corner, and the one Accept writes the
+// corrections beside the rest. Only where the engine says what values the
+// axis takes; an older engine's grid is as before.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { valueTone, chosenTone } from "../campaigns/values";
 import { ScanViewer } from "../data/ScanViewer";
@@ -24,7 +30,12 @@ import {
   acceptedFollowLine,
   acceptedWords,
   type Accepted,
+  apartOf,
   bandWords,
+  chooseValue,
+  closeList,
+  correctedWords,
+  corrects,
   defaultFilter,
   filterOf,
   grid,
@@ -33,10 +44,12 @@ import {
   keyAct,
   mayAccept,
   moved,
+  openList,
+  paletteOf,
   rangeApart,
   refusedWords,
   SIZES,
-  slots,
+  spaceApart,
   stateLine,
   tally,
   tileTitle,
@@ -205,7 +218,9 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       e.preventDefault();
       switch (act.kind) {
         case "apart":
-          return setState((s) => (s && s.focus !== null ? toggleApart(s, s.focus) : s));
+          return setState((s) => (s && s.focus !== null ? spaceApart(s, s.focus) : s));
+        case "list":
+          return setState((s) => (s ? openList(s) : s));
         case "apply":
           return k.apply();
         case "move":
@@ -213,6 +228,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
         case "full":
           return setFull(true);
         case "back":
+          if (k.state.listing !== null) return setState((s) => (s ? closeList(s) : s));
           location.hash = href("review");
           return;
       }
@@ -270,7 +286,7 @@ export interface GridBodyProps {
 export function GridBody(p: GridBodyProps) {
   const s = p.state;
   const page = s?.page ?? null;
-  const palette = useMemo(() => (page ? slots(page.values, [page.value ?? ""].filter(Boolean)) : []), [page]);
+  const palette = useMemo(() => (s ? paletteOf(s) : []), [s?.page, s?.corrections]); // eslint-disable-line react-hooks/exhaustive-deps
   const t = s ? tally(s) : null;
   const focusAt = s && page ? Math.max(0, page.scans.findIndex((x) => x.stack === s.focus)) : 0;
   const set = (f: (s: GridState) => GridState) => p.onState((x) => (x ? f(x) : x));
@@ -350,7 +366,7 @@ export function GridBody(p: GridBodyProps) {
         <div className={p.reading ? "pgrid-wrap reading" : "pgrid-wrap"}>
           <div className="pgrid" ref={p.grid} data-pgrid="" aria-busy={p.reading || undefined}>
             {page.scans.map((x) => (
-              <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} />
+              <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} onCorner={() => set((y) => openList(y, x.stack))} onState={set} />
             ))}
           </div>
           {p.reading && (
@@ -367,7 +383,16 @@ export function GridBody(p: GridBodyProps) {
           </button>
           {t && (
             <span className="q-tally" role="status" aria-live="polite">
-              {t.apart > 0 ? <><b>{n(t.apart)}</b> set apart</> : <span className="meta">click a wrong one to set it apart</span>}
+              {t.corrected > 0 || t.apart > 0 ? (
+                [t.corrected > 0 ? <><b>{n(t.corrected)}</b> corrected ({correctedWords(s)})</> : null, t.apart > 0 ? <><b>{n(t.apart)}</b> set apart</> : null].filter(Boolean).map((part, i) => (
+                  <span key={i}>
+                    {i > 0 ? " · " : ""}
+                    {part}
+                  </span>
+                ))
+              ) : (
+                <span className="meta">click a wrong one to set it apart{corrects(s) ? ", 0 gives it its value" : ""}</span>
+              )}
               {t.decided > 0 ? <> · <b>{n(t.decided)}</b> decided by a person, kept</> : null}
             </span>
           )}
@@ -379,6 +404,11 @@ export function GridBody(p: GridBodyProps) {
             <span>
               <kbd>shift</kbd>click a range
             </span>
+            {corrects(s) && (
+              <span>
+                <kbd>0</kbd>other value
+              </span>
+            )}
             <span>
               <kbd>f</kbd>full size
             </span>
@@ -453,16 +483,79 @@ export function Histogram({ bands, range, min, max, onChange }: { bands: Band[];
   );
 }
 
-function Tile({ scan: x, state: s, palette, onClick }: { scan: GScan; state: GridState; palette: string[]; onClick: (shift: boolean) => void }) {
+/**
+ * A scan's tile: its picture framed in the proposed value's colour; set apart, the caution frame and the word
+ * `apart` in its corner; corrected, the person's value's colour and that word. The corner opens the value list
+ * where the engine offers one.
+ */
+function Tile({ scan: x, state: s, palette, onClick, onCorner, onState }: { scan: GScan; state: GridState; palette: string[]; onClick: (shift: boolean) => void; onCorner: () => void; onState: (f: (s: GridState) => GridState) => void }) {
   const apart = x.stack in s.apart;
+  const correction = s.corrections[x.stack] ?? null;
   const focused = s.focus === x.stack;
-  const cls = ["pg-tile", focused ? "focused" : "", apart ? "apart" : "", x.decided ? "decided" : ""].filter(Boolean).join(" ");
+  const listing = s.listing === x.stack || (s.listing === "apart" && apart && focused);
+  const cls = ["pg-tile", focused ? "focused" : "", apart && !correction ? "apart" : "", correction ? "corrected" : "", x.decided ? "decided" : "", listing ? "listing" : ""].filter(Boolean).join(" ");
+  const corner = correction ?? (apart ? "apart" : null);
+  const label = `scan ${x.stack}: ${x.proposed} ${x.probability.toFixed(2)}${correction ? `, corrected to ${correction}` : apart ? ", set apart" : ""}${x.decided ? ", decided by a person" : ""}`;
   return (
-    <div className={cls} data-stack={x.stack} {...valueTone(palette, x.proposed)} aria-label={`scan ${x.stack}: ${x.proposed} ${x.probability.toFixed(2)}${apart ? ", set apart" : ""}${x.decided ? ", decided by a person" : ""}`} aria-current={focused ? "true" : undefined} title={tileTitle(x)} onClick={(e) => onClick(e.shiftKey)}>
+    <div className={cls} data-stack={x.stack} {...valueTone(palette, correction ?? x.proposed)} aria-label={label} aria-current={focused ? "true" : undefined} title={tileTitle(x, correction)} onClick={(e) => onClick(e.shiftKey)}>
       {x.picture ? <img src={x.picture} alt="" decoding="async" draggable={false} /> : <span className="q-blank">no picture</span>}
       <span className="pg-p">{x.probability.toFixed(2)}</span>
-      {apart && <span className="pg-mark">apart</span>}
+      {corner &&
+        (corrects(s) ? (
+          <button
+            type="button"
+            className={correction ? "pg-mark pg-corner pg-value" : "pg-mark pg-corner"}
+            {...(correction ? valueTone(palette, correction) : {})}
+            aria-expanded={listing}
+            title={correction ? "another value" : "its value"}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.currentTarget.blur();
+              onCorner();
+            }}
+          >
+            {corner}
+          </button>
+        ) : (
+          <span className="pg-mark">{corner}</span>
+        ))}
       {x.decided && !apart && <span className="pg-mark pg-decided">decided</span>}
+      {listing && <ValueList state={s} palette={palette} onState={onState} />}
+    </div>
+  );
+}
+
+/** The axis's whole value list over a tile, open once for that scan or for the scans set apart; the pick closes it. */
+function ValueList({ state: s, palette, onState }: { state: GridState; palette: string[]; onState: (f: (s: GridState) => GridState) => void }) {
+  const forApart = s.listing === "apart";
+  const stack = typeof s.listing === "number" ? s.listing : s.focus;
+  const have = forApart ? null : stack !== null ? s.corrections[stack] ?? null : null;
+  const count = forApart ? apartOf(s).length : 1;
+  const who = forApart ? `the ${n(count)} set apart` : `scan ${stack}`;
+  // the list opens to the right of the tile's corner; at the grid's right edge it opens to the left instead
+  const el = useRef<HTMLDivElement | null>(null);
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    const pop = el.current;
+    const host = pop?.closest<HTMLElement>(".pgrid");
+    if (!pop || !host) return;
+    const r = pop.getBoundingClientRect();
+    const h = host.getBoundingClientRect();
+    if (r.width > 0 && r.right > h.right) setFlip(true);
+  }, []);
+  return (
+    <div ref={el} className={flip ? "q-pop flip" : "q-pop"} role="group" aria-label={`a value for ${who}`} onClick={(e) => e.stopPropagation()}>
+      <span className="meta q-pop-for">
+        {who} · {axisTitle(s.page.axis).toLowerCase()}
+      </span>
+      {s.page.legal.map((v) => {
+        const on = have === v;
+        return (
+          <button key={v} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} {...chosenTone(palette, v, on)} onClick={() => onState((x) => chooseValue(x, v))}>
+            {v}
+          </button>
+        );
+      })}
     </div>
   );
 }
