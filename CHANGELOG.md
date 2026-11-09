@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.10] - 2026-11-09
+
+The tenth desk beta is the sixth UX round, from the first morning on the proposals grid and a question's grid in production. A confidence handle moves the band on screen and the page is read once, on the release, with the pictures kept under a veil until the new page lands, where a drag had read 500 pictures at every pixel and left the page blank. A question's grid reads like the campaign gallery: one bar with the two answers as coloured chips, the tally and Apply; a tile framed in the colour of the answer it will get, toggled by a click, set apart by space; another value as a popover behind 0, not a standing row. The Proposals page says "the other N" only beside a commit. The engine floor is unchanged.
+
 ### Changed
 
 - A question's grid reads like the campaign gallery, not like a form (UX round 6). Above the pictures stands one bar: the question's two answers as coloured chips that are also keys (1 and 2; pressed, that answer goes to every scan not set otherwise), **other…** (0), one **?** with the keys behind it, the tally (`10 scans · brain-neck 6 · brain 4 · 1 set apart`) and Apply. The question's first answer is every scan's at open, so a page is applied as it stands. A tile is the scan's picture framed in the colour of the answer it will get, that word in its corner, and the scan's name; a click gives it the other answer and takes it back, shift-click or space sets it apart (it stays open), f opens it full size. The axis's whole value list is no longer a band of its own: 0 or **other…** opens it once, over the scan in focus or for the scans set apart, and the pick closes it. The tiles' dropdowns, the key row's help words, the "no value" key and the standing value list are gone; the blind, staged and System 1 marks, "Ask people about these", "Next question", the arrows and Enter stay. A one-answer question has the same shape, with **other…** as its second side. Apply writes each tile's answer as before; the engine is unchanged.
