@@ -360,7 +360,7 @@ export function commitWords(s: Standing): string {
   return `Commit the ${nf(s.commit.stacks)} at or above the threshold`;
 }
 
-/** The campaign's button. */
+/** The campaign's button: "the other" only beside a commit, which takes the sure ones; alone it said "the other 145,274" with nothing else on the card. */
 export function campaignWords(s: Standing): string {
-  return `Make a campaign of the other ${nf(s.below.stacks)} for me`;
+  return `Make a campaign of the ${s.commit.stacks > 0 ? "other " : ""}${nf(s.below.stacks)} for me`;
 }

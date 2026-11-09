@@ -99,6 +99,10 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
   const [since, setSince] = useState(Date.now());
+  // a read under way, the grid still on screen under it; each read carries its number, so an answer
+  // to an earlier read that lands after a later one is dropped
+  const [reading, setReading] = useState(false);
+  const seq = useRef(0);
   const gridEl = useRef<HTMLDivElement | null>(null);
   const accepting = mayAccept(caps);
   // the first read opens the filter: the value with the most scans, the band below the threshold
@@ -106,13 +110,21 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
 
   const read = useCallback(
     (f: Filter) => {
+      const mine = ++seq.current;
       setSince(Date.now());
+      setReading(true);
       return grid.scans(model, axis, f).then(
         (p) => {
+          if (mine !== seq.current) return;
+          setReading(false);
           setFailed(null);
           setState(gridOf(p));
         },
-        (e: unknown) => setFailed(refusedWords(e).words),
+        (e: unknown) => {
+          if (mine !== seq.current) return;
+          setReading(false);
+          setFailed(refusedWords(e).words);
+        },
       );
     },
     [model, axis],
@@ -135,11 +147,10 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     );
   }, [model, axis, given, read]);
 
-  /** The filter changed by the person: the address keeps it, the page is read again. */
+  /** The filter changed by the person: the address keeps it, the page is read again; the grid that is there stays until the new one lands. */
   const narrow = useCallback(
     (f: Filter) => {
       setFilter(f);
-      setState(null);
       history.replaceState(null, "", gridHref(model, axis, f));
       void read(f);
     },
@@ -223,6 +234,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       filter={filter}
       failed={failed}
       said={line}
+      reading={reading}
       busy={busy}
       full={full}
       since={since}
@@ -242,6 +254,7 @@ export interface GridBodyProps {
   filter: Filter;
   failed: string | null;
   said: string | null;
+  reading: boolean;
   busy: boolean;
   full: boolean;
   since?: number;
@@ -285,7 +298,10 @@ export function GridBody(p: GridBodyProps) {
       </div>
       {p.failed && (
         <p className="warn">
-          <Icon name="alert" /> {p.failed}
+          <Icon name="alert" /> {p.failed}{" "}
+          <button type="button" className="button" onClick={() => p.onFilter(p.filter)}>
+            Try again
+          </button>
         </p>
       )}
       {page && (
@@ -331,10 +347,17 @@ export function GridBody(p: GridBodyProps) {
         </div>
       )}
       {s && page && !empty && (
-        <div className="pgrid" ref={p.grid} data-pgrid="">
-          {page.scans.map((x) => (
-            <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} />
-          ))}
+        <div className={p.reading ? "pgrid-wrap reading" : "pgrid-wrap"}>
+          <div className="pgrid" ref={p.grid} data-pgrid="" aria-busy={p.reading || undefined}>
+            {page.scans.map((x) => (
+              <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} />
+            ))}
+          </div>
+          {p.reading && (
+            <div className="pg-veil">
+              <Wait phase="reading the scans" since={p.since ?? Date.now()} size="line" />
+            </div>
+          )}
         </div>
       )}
       {s && page && !empty && (
@@ -378,11 +401,40 @@ export function Histogram({ bands, range, min, max, onChange }: { bands: Band[];
   const span = Math.max(hi - lo, 0.0001);
   const most = Math.max(1, ...bands.map((b) => b.count));
   const at = (p: number) => `${(((p - lo) / span) * 100).toFixed(2)}%`;
-  const from = min ?? lo;
-  const to = max ?? hi;
   const step = 0.01;
+  // The handles move the band on screen as they are dragged, and the page is read once, on the
+  // release (or 300 ms after the last move, where no release arrives, as on some touch screens).
+  // A drag fired a read of 500 pictures at every pixel and the page stayed blank between them.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const dragRef = useRef<{ from: number; to: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const from = drag?.from ?? min ?? lo;
+  const to = drag?.to ?? max ?? hi;
   // a handle at the range's own edge leaves that edge open
-  const give = (a: number, b: number) => onChange(a <= lo + 1e-9 ? null : Math.min(a, b - step), b >= hi - 1e-9 ? null : Math.max(b, a + step));
+  const settle = (a: number, b: number) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    dragRef.current = null;
+    setDrag(null);
+    onChange(a <= lo + 1e-9 ? null : Math.min(a, b - step), b >= hi - 1e-9 ? null : Math.max(b, a + step));
+  };
+  const move = (a: number, b: number) => {
+    const d = { from: Math.min(a, b - step), to: Math.max(b, a + step) };
+    dragRef.current = d;
+    setDrag(d);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => settle(d.from, d.to), 300);
+  };
+  const release = () => {
+    const d = dragRef.current;
+    if (d) settle(d.from, d.to);
+  };
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   return (
     <div className="pg-hist" role="group" aria-label="Confidence">
       <div className="pg-bars" aria-hidden="true">
@@ -393,10 +445,10 @@ export function Histogram({ bands, range, min, max, onChange }: { bands: Band[];
         <span className="pg-chosen" style={{ left: at(from), width: `calc(${at(to)} - ${at(from)})` }} />
       </div>
       <div className="pg-handles">
-        <input type="range" aria-label="Lowest confidence" min={lo} max={hi} step={step} value={from} onChange={(e) => give(Number(e.target.value), to)} />
-        <input type="range" aria-label="Highest confidence" min={lo} max={hi} step={step} value={to} onChange={(e) => give(from, Number(e.target.value))} />
+        <input type="range" aria-label="Lowest confidence" min={lo} max={hi} step={step} value={from} onChange={(e) => move(Number(e.target.value), to)} onPointerUp={release} onKeyUp={release} onTouchEnd={release} />
+        <input type="range" aria-label="Highest confidence" min={lo} max={hi} step={step} value={to} onChange={(e) => move(from, Number(e.target.value))} onPointerUp={release} onKeyUp={release} onTouchEnd={release} />
       </div>
-      <span className="pg-band meta">{bandWords(min, max) || `${lo.toFixed(2)} to ${hi.toFixed(2)}`}</span>
+      <span className="pg-band meta">{bandWords(from <= lo + 1e-9 ? null : from, to >= hi - 1e-9 ? null : to) || `${lo.toFixed(2)} to ${hi.toFixed(2)}`}</span>
     </div>
   );
 }

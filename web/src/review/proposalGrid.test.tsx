@@ -191,7 +191,13 @@ describe("the page", () => {
   let root: Root;
   let host: HTMLElement;
   let calls: { method: string; url: string; body: Json | null }[];
+  let holds: (() => void)[];
+  const release = () => act(async () => {
+    holds.shift()?.();
+    await new Promise((r) => setTimeout(r, 0));
+  });
   beforeEach(() => {
+    holds = [];
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -206,7 +212,10 @@ describe("the page", () => {
         const u = new URL(url, "http://desk");
         const q = u.searchParams;
         const value = q.get("value");
-        return reply(gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total: value === "spine" ? 0 : undefined }));
+        const doc = gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total: value === "spine" ? 0 : undefined });
+        // spine and a band answer when the test lets them, so a later read can land before them and the veil can be seen
+        if (value === "spine" || q.get("min")) await new Promise<void>((r) => holds.push(r));
+        return reply(doc);
       }
       if (url === "/api/review/proposals/accept") return reply(accepted(body as { seen: number[]; except: number[]; value: string }));
       // the re-sort job the accept queued, over on its first read
@@ -243,10 +252,48 @@ describe("the page", () => {
     expect(host.querySelector("dialog")).toBeNull();
     // the address keeps the filter once the person narrows
     await click(host.querySelectorAll(".pg-values .opt")[1]);
-    await settle();
+    await release();
     expect(location.hash).toBe("#review/proposals/12/body_part?value=spine&size=250");
     expect(calls.at(-1)?.url).toBe("/api/review/proposals/scans?model=12&axis=body_part&value=spine&page=1&size=250");
     expect(host.querySelector(".qgrid-done .lede")?.textContent).toBe("Nothing left here for spine.");
+  });
+
+  it("keeps the grid on screen while a narrower page is read, asks one read for a drag of a handle, and drops an answer that lands late", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    const before = calls.length;
+    const low = host.querySelector<HTMLInputElement>(".pg-handles input")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    // five moves of the lower handle: the band follows on screen, nothing is read yet
+    for (const v of ["0.2", "0.25", "0.3", "0.35", "0.4"]) {
+      await act(async () => {
+        setValue.call(low, v);
+        low.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    expect(calls.length).toBe(before);
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    expect(host.querySelector(".pg-band")?.textContent).toContain("0.40");
+    // the release asks the one read; the grid stays under a veil until it lands
+    await act(async () => void low.dispatchEvent(new MouseEvent("pointerup", { bubbles: true })));
+    expect(calls.length).toBe(before + 1);
+    expect(calls.at(-1)?.url).toContain("min=0.4");
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    expect(host.querySelector(".pg-veil")).not.toBeNull();
+    await release();
+    expect(host.querySelector(".pg-veil")).toBeNull();
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    // spine is held and neck answers at once: the page shows neck, and spine's late answer is dropped
+    const chips = host.querySelectorAll(".pg-values .opt");
+    await click(chips[1]);
+    await click(chips[0]);
+    await settle();
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    await release();
+    expect(host.querySelector(".qgrid-done")).toBeNull();
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    expect(host.querySelector(".pg-values .opt.on")?.textContent).toBe("neck41,212");
   });
 
   it("sets apart on click and shift-click and the keys, accepts the page on Enter, says what was written, and loads the next page", async () => {
