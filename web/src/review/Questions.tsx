@@ -3,15 +3,19 @@
 // DR1 and DR2): the few questions the sort leaves to a person. The Questions
 // page says each in plain words as a card (UX round 5: under Review's head,
 // one axis or all, nothing else) with its distinct scans ("Which base? 7
-// scans") and why; Answer opens its grid, a page of its scans' pictures,
-// each framed in the colour of NILS's answer, with System 1's answer as a
-// second small mark (the tiles it agrees with step back) and a staged answer
-// marked. Two keys above the grid give the two answers in dispute, 0 the
-// axis's whole list and - no value; space sets the focused scan apart (it
-// takes the other key's answer), Enter applies to the page, and the next
-// page, then the next question, opens. The arrows move, f opens a scan full
-// size with its slices, ? shows each scan's rule and what it was decided
-// over. No dialog, no scope, no why field.
+// scans") and why; Answer opens its grid, which reads like the campaign
+// gallery (UX round 6): the pictures first, each framed in the colour of the
+// answer it will get with that word in its corner, the question's first
+// answer every scan's at open; one bar above them with the two answers as
+// coloured chips (keys 1 and 2, pressed: that answer for every scan not set
+// otherwise), "other…" (0: the axis's whole list once, as a popover for the
+// scan in focus or for the scans set apart), the keys behind one ?, the
+// tally and Apply. A click gives a scan the other answer and takes it back,
+// shift-click or space sets it apart (it stays open), f opens it full size,
+// Enter applies the page and the next page, then the next question, opens.
+// System 1's answer is a second small mark (the tiles it agrees with step
+// back), a staged answer and a blind scan are marked. No dialog, no scope,
+// no why field.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -26,9 +30,12 @@ import { axisTitle } from "./work";
 import {
   answerBody,
   answeredWords,
+  apartOf,
+  axisWords,
   chooseKey,
   chooseNothing,
   chooseValue,
+  focusApart,
   gridHref,
   gridOf,
   keyAct,
@@ -42,13 +49,12 @@ import {
   questions,
   refusedWords,
   ruleLine,
-  setApart,
   slots,
-  tally,
+  tallyWords,
   tileAnswer,
   toggleApart,
+  toggleTile,
   valueLabel,
-  type Apart,
   type GridState,
   type QPage,
   type QScan,
@@ -149,6 +155,7 @@ export function QuestionsRoute({ where, axis }: { where: Where; axis: string | n
   return <QuestionsPage list={list} where={where} failed={failed} since={since} axis={axis} />;
 }
 
+
 // ------------------------------------------------------------ DR2, the grid
 
 /** What the page said last, carried to the next question's grid as it opens. */
@@ -190,9 +197,12 @@ function asScan(s: QScan): Scan {
 /** The scans left for later in this sitting, set apart again when they come back. */
 function withSkips(s: GridState, skipped: Set<number>): GridState {
   let out = s;
-  for (const scan of s.page.scans) if (skipped.has(scan.stack)) out = setApart(out, scan.stack, { kind: "skip" });
-  return out;
+  for (const scan of s.page.scans) if (skipped.has(scan.stack) && out.tiles[scan.stack]?.kind !== "apart") out = toggleApart(out, scan.stack);
+  return { ...out, focus: s.focus };
 }
+
+/** The keys, behind the bar's one ? chip. */
+export const KEYS_HELP = "1 and 2: that answer for every scan · click a scan: the other answer, and back · shift-click or space: set a scan apart, it stays open · 0: another value for the scan in focus (one set apart: for all set apart) · arrows: move · f: full size · Enter: apply · ?: each scan's rule";
 
 export function QuestionGrid({ caps, qkey, where }: { caps: Capabilities; qkey: string; where: Where }) {
   const [state, setState] = useState<GridState | null>(null);
@@ -272,7 +282,7 @@ export function QuestionGrid({ caps, qkey, where }: { caps: Capabilities; qkey: 
     if (!state || busy) return;
     if (!answering) return setSaid("Answering needs work on the Review page.");
     const body = answerBody(state, where);
-    if (!body) return setSaid("Choose an answer first: 1, 2, 0 or -.");
+    if (!body) return setSaid("This question offers no answer to apply.");
     const was = state;
     setBusy(true);
     questions
@@ -335,8 +345,6 @@ export function QuestionGrid({ caps, qkey, where }: { caps: Capabilities; qkey: 
           return setState((s) => (s ? chooseKey(s, act.key) : s));
         case "list":
           return setState((s) => (s ? openList(s) : s));
-        case "nothing":
-          return setState((s) => (s ? chooseNothing(s) : s));
         case "apart":
           return setState((s) => (s && s.focus !== null ? toggleApart(s, s.focus) : s));
         case "apply":
@@ -408,12 +416,11 @@ export interface GridBodyProps {
   onFull: (open: boolean) => void;
 }
 
-/** The grid as it draws from its state. */
+/** The grid as it draws from its state: the head, one bar, the pictures. */
 export function GridBody(p: GridBodyProps) {
   const s = p.state;
   const page = s?.page ?? null;
   const palette = useMemo(() => (page ? slots(page.vocabulary, page.values) : []), [page]);
-  const t = s ? tally(s) : null;
   const kinds = Object.entries(p.question?.kinds ?? {}).sort((a, b) => b[1] - a[1]);
   const ask = asksPeople(p.caps) && kinds.length > 0 ? askPeopleHref({ kind: kinds[0][0], cohort: p.where.cohort ?? null }) : null;
   const blind = page ? page.scans.filter((x) => x.blind).length : 0;
@@ -427,7 +434,16 @@ export function GridBody(p: GridBodyProps) {
       <h1>{page?.words ?? p.question?.words ?? "Question"}</h1>
       {page && (
         <span className="meta">
-          {[page.reason, scans(page.total), page.pages > 1 ? `${n(page.scans.length)} on this page` : null, page.system1.status === "not_confirmed" && page.scans.some((x) => x.system1) ? "System 1 not confirmed" : null].filter(Boolean).join(" · ")}
+          {[
+            page.reason,
+            scans(page.total),
+            page.pages > 1 ? `${n(page.scans.length)} on this page` : null,
+            page.system1.status === "not_confirmed" && page.scans.some((x) => x.system1) ? "System 1 not confirmed" : null,
+            blind > 0 ? `${scans(blind)} read blind first, NILS's answers hidden` : null,
+            page.pictures && !page.pictures.shown && page.pictures.why ? `no pictures: ${page.pictures.why}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
       )}
       <span className="grow" />
@@ -456,17 +472,19 @@ export function GridBody(p: GridBodyProps) {
         </div>
       </section>
     );
-  const keyButton = (key: "1" | "2") => {
+  /** One of the two answers as a coloured chip: pressed, it is the answer of every scan not set otherwise. */
+  const chip = (key: "1" | "2") => {
     const v = s ? keyValue(s, key) : null;
     if (!s || v === null) return null;
-    const on = s.choice?.kind === "value" && s.choice.value === v && s.choice.key === key;
+    const on = s.answer === v;
     return (
       <button
         key={key}
         type="button"
-        className={on ? "opt on" : "opt"}
+        className={on ? "opt q-chip on" : "opt q-chip"}
         aria-pressed={on}
-        {...chosenTone(palette, v, on)}
+        title={on ? `${v}: every scan not set otherwise` : `${v} for every scan not set otherwise`}
+        {...valueTone(palette, v)}
         onClick={(e) => {
           set((x) => chooseKey(x, key));
           e.currentTarget.blur();
@@ -477,8 +495,7 @@ export function GridBody(p: GridBodyProps) {
       </button>
     );
   };
-  const listed = s?.choice?.kind === "value" && s.choice.key === "0" ? s.choice.value : null;
-  const nothing = s?.choice?.kind === "nothing";
+  const forApart = s && focusApart(s) ? apartOf(s).length : 0;
   return (
     <section className="qgrid-page" aria-label="question">
       {head}
@@ -489,88 +506,50 @@ export function GridBody(p: GridBodyProps) {
       )}
       {!s && !p.failed && <Wait phase="reading the scans" since={Date.now()} size="line" />}
       {s && page && (
-        <div className="qgrid-bar" role="toolbar" aria-label="keys">
+        <div className="qgrid-bar" role="toolbar" aria-label="answers">
           <span className="q-keys">
-            {keyButton("1")}
-            {keyButton("2")}
+            {chip("1")}
+            {chip("2")}
             <button
               type="button"
-              className={listed ? "opt on" : "opt"}
-              aria-pressed={listed !== null}
-              aria-expanded={s.listing === "answer"}
-              {...(listed ? chosenTone(palette, listed, true) : {})}
+              className={s.listing !== null ? "opt q-other on" : "opt q-other"}
+              aria-expanded={s.listing !== null}
+              title={forApart > 0 ? `another value for the ${scans(forApart)} set apart` : "another value for the scan in focus"}
               onClick={(e) => {
                 set((x) => openList(x));
                 e.currentTarget.blur();
               }}
             >
               <kbd>0</kbd>
-              {listed ?? "other value"}
+              other…
             </button>
-            <button
-              type="button"
-              className={nothing ? "opt on" : "opt"}
-              aria-pressed={nothing}
-              onClick={(e) => {
-                set(chooseNothing);
-                e.currentTarget.blur();
-              }}
-            >
-              <kbd>-</kbd>no value
+            <button type="button" className={s.reasons ? "opt q-help on" : "opt q-help"} aria-pressed={s.reasons} aria-label="the keys" title={KEYS_HELP} onClick={() => set((x) => ({ ...x, reasons: !x.reasons }))}>
+              ?
             </button>
-          </span>
-          <span className="q-help">
-            <span>
-              <kbd>space</kbd>set apart
-            </span>
-            <span>
-              <kbd>f</kbd>full size
-            </span>
-            <span>
-              <kbd>?</kbd>why
-            </span>
           </span>
           <span className="grow" />
-          {t && (
-            <span className="q-tally" role="status" aria-live="polite">
-              <b>{n(t.total)}</b> {t.total === 1 ? "scan" : "scans"}
-              {t.answer ? (
-                <>
-                  {" · "}
-                  <b>{t.answer}</b>
-                </>
-              ) : null}
-              {t.apart > 0 ? <> · <b>{n(t.apart)}</b> set apart</> : null}
-            </span>
-          )}
-          <button type="button" className="button" disabled={p.busy || !s.choice || !p.answering} onClick={p.onApply}>
+          <span className="q-tally" role="status" aria-live="polite">
+            {tallyWords(s)}
+          </span>
+          <button type="button" className="button" disabled={p.busy || s.answer === null || !p.answering} onClick={p.onApply}>
             Apply <kbd>Enter</kbd>
           </button>
-        </div>
-      )}
-      {s && page && s.listing !== null && (
-        <div className="q-list" role="group" aria-label={typeof s.listing === "number" ? `the value of scan ${s.listing}` : `every value of ${page.axis.replaceAll("_", " ")}`}>
-          <span className="meta">{typeof s.listing === "number" ? `scan ${s.listing}` : page.axis.replaceAll("_", " ")}</span>
-          {page.vocabulary.map((v) => {
-            const on = s.listing === "answer" && s.choice?.kind === "value" && s.choice.value === v.value;
-            return (
-              <button key={v.value} type="button" className={on ? "opt on" : "opt"} {...chosenTone(palette, v.value, on)} onClick={() => set((x) => chooseValue(x, v.value))}>
-                {valueLabel(page.vocabulary, v.value)}
-              </button>
-            );
-          })}
-          <button type="button" className="opt" onClick={() => set(chooseNothing)}>
-            no value
-          </button>
+          {s.listing === "apart" && <ValueList state={s} palette={palette} onState={set} />}
         </div>
       )}
       {p.said && <p className="meta said qgrid-said">{p.said}</p>}
-      {page?.pictures && !page.pictures.shown && page.pictures.why && <p className="meta">No pictures: {page.pictures.why}</p>}
-      {blind > 0 && <p className="meta">{scans(blind)} read blind first: NILS's answers are hidden on {blind === 1 ? "it" : "them"}.</p>}
       {s && page && (
         <div className="qgrid" ref={p.grid} data-qgrid="">
           {page.scans.map((x) => (
-            <Tile key={x.stack} scan={x} state={s} palette={palette} onToggle={() => set((y) => toggleApart({ ...y, focus: x.stack }, x.stack))} onApart={(a) => set((y) => setApart(y, x.stack, a))} />
+            <Tile
+              key={x.stack}
+              scan={x}
+              state={s}
+              palette={palette}
+              onToggle={() => set((y) => (otherOf(y) === null ? openList({ ...y, focus: x.stack }, x.stack) : toggleTile(y, x.stack)))}
+              onApart={() => set((y) => toggleApart(y, x.stack))}
+              onState={set}
+            />
           ))}
         </div>
       )}
@@ -583,25 +562,57 @@ export function GridBody(p: GridBodyProps) {
   );
 }
 
-/** What a set-apart tile's own picker shows: a value, no value, or later. */
-function apartChoice(s: GridState, stack: number): string {
-  const a = tileAnswer(s, stack);
-  if (!a || a.kind === "skip") return "~skip";
-  return a.kind === "nothing" ? "~nothing" : a.value;
+/** The axis's whole value list, open once for one scan or for the scans set apart, closed by the pick. */
+function ValueList({ state: s, palette, onState }: { state: GridState; palette: string[]; onState: (f: (s: GridState) => GridState) => void }) {
+  const page = s.page;
+  const forApart = s.listing === "apart";
+  const stack = typeof s.listing === "number" ? s.listing : null;
+  const have = stack !== null ? s.tiles[stack] : null;
+  const count = forApart ? apartOf(s).length : 1;
+  const who = forApart ? `the ${scans(count)} set apart` : `scan ${stack}`;
+  return (
+    <div className="q-pop" role="group" aria-label={`a value for ${who}`} onClick={(e) => e.stopPropagation()}>
+      <span className="meta q-pop-for">
+        {who} · {axisWords(page.axis)}
+      </span>
+      {page.vocabulary.map((v) => {
+        const on = have?.kind === "value" && have.value === v.value;
+        return (
+          <button key={v.value} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} {...chosenTone(palette, v.value, on)} onClick={() => onState((x) => chooseValue(x, v.value))}>
+            {valueLabel(page.vocabulary, v.value)}
+          </button>
+        );
+      })}
+      <button type="button" className={have?.kind === "nothing" ? "opt on" : "opt"} aria-pressed={have?.kind === "nothing"} onClick={() => onState(chooseNothing)}>
+        no value
+      </button>
+    </div>
+  );
 }
 
-function Tile({ scan: x, state: s, palette, onToggle, onApart }: { scan: QScan; state: GridState; palette: string[]; onToggle: () => void; onApart: (a: Apart) => void }) {
-  const apart = x.stack in s.apart;
+/** A scan's tile: its picture framed in the colour of the answer it will get, the answer word in its corner, its name. */
+function Tile({ scan: x, state: s, palette, onToggle, onApart, onState }: { scan: QScan; state: GridState; palette: string[]; onToggle: () => void; onApart: () => void; onState: (f: (s: GridState) => GridState) => void }) {
+  const t = s.tiles[x.stack] ?? null;
+  const to = tileAnswer(s, x.stack);
+  const apart = to?.kind === "skip";
   const focused = s.focus === x.stack;
   const agrees = x.system1?.agrees === true && x.nils !== null;
-  const cls = ["q-tile", x.blind ? "blind" : x.nils === null ? "none" : "", focused ? "focused" : "", apart ? "apart" : "", agrees ? "dim" : ""].filter(Boolean).join(" ");
+  const word = !to ? "no answer yet" : to.kind === "skip" ? "set apart" : to.kind === "nothing" ? "no value" : to.value;
+  const cls = ["q-tile", focused ? "focused" : "", t ? "own" : "", apart ? "apart" : "", to?.kind === "nothing" ? "nothing" : "", x.blind ? "blind" : "", agrees ? "dim" : ""].filter(Boolean).join(" ");
   const s1 = opinionWords(x.system1);
   const rule = s.reasons ? ruleLine(x.rules) : null;
-  const to = apart ? tileAnswer(s, x.stack) : null;
-  const other = otherOf(s);
-  const label = `scan ${x.stack}: ${x.blind ? "blind" : (x.nils ?? "no value")}${apart ? `, set apart${to?.kind === "value" ? ` to ${to.value}` : to?.kind === "nothing" ? " to no value" : ", for later"}` : ""}`;
+  const title = [x.description, x.subject?.code ? `subject ${x.subject.code}` : null, x.day, x.blind ? "read blind: NILS's answer hidden" : `NILS: ${x.nils ?? "no value"}`, s1 ? `System 1: ${s1}` : null].filter(Boolean).join(" · ");
+  const tone = to?.kind === "value" ? valueTone(palette, to.value) : {};
   return (
-    <div className={cls} data-stack={x.stack} {...(x.blind ? {} : valueTone(palette, x.nils))} aria-label={label} aria-current={focused ? "true" : undefined} title={[x.description, x.subject?.code ? `subject ${x.subject.code}` : null, x.day].filter(Boolean).join(" · ") || undefined} onClick={onToggle}>
+    <div
+      className={cls}
+      data-stack={x.stack}
+      {...tone}
+      aria-label={`scan ${x.stack}: ${word}${x.blind ? ", blind" : ""}`}
+      aria-current={focused ? "true" : undefined}
+      title={title}
+      onClick={(e) => (e.shiftKey ? onApart() : onToggle())}
+    >
       <div className="q-pic">
         {x.picture ? <img src={x.picture} alt="" decoding="async" draggable={false} /> : <span className="q-blank">no picture yet</span>}
         {x.blind && <span className="q-mark q-blind">blind</span>}
@@ -615,34 +626,13 @@ function Tile({ scan: x, state: s, palette, onToggle, onApart }: { scan: QScan; 
             S1 {s1}
           </span>
         )}
-      </div>
-      <div className="q-line">
-        <span className="q-nils">{x.blind ? "blind" : (x.nils ?? "no value")}</span>
-        {apart && (
-          <span className="q-to" onClick={(e) => e.stopPropagation()}>
-            →
-            <select
-              aria-label={`answer for scan ${x.stack}`}
-              value={apartChoice(s, x.stack)}
-              onChange={(e) => {
-                const v = e.target.value;
-                onApart(v === "~skip" ? { kind: "skip" } : v === "~nothing" ? { kind: "nothing" } : v === other ? { kind: "other" } : { kind: "value", value: v });
-                e.target.blur();
-              }}
-            >
-              {palette.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-              <option value="~nothing">no value</option>
-              <option value="~skip">later</option>
-            </select>
-          </span>
-        )}
+        <span className="q-mark q-answer" {...tone}>
+          {word}
+        </span>
       </div>
       <div className="q-name">{x.name ?? x.description ?? `scan ${x.stack}`}</div>
       {rule && <div className="q-rule">{rule}</div>}
+      {s.listing === x.stack && <ValueList state={s} palette={palette} onState={onState} />}
     </div>
   );
 }

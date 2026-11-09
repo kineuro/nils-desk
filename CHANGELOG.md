@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- A question's grid reads like the campaign gallery, not like a form (UX round 6). Above the pictures stands one bar: the question's two answers as coloured chips that are also keys (1 and 2; pressed, that answer goes to every scan not set otherwise), **other…** (0), one **?** with the keys behind it, the tally (`10 scans · brain-neck 6 · brain 4 · 1 set apart`) and Apply. The question's first answer is every scan's at open, so a page is applied as it stands. A tile is the scan's picture framed in the colour of the answer it will get, that word in its corner, and the scan's name; a click gives it the other answer and takes it back, shift-click or space sets it apart (it stays open), f opens it full size. The axis's whole value list is no longer a band of its own: 0 or **other…** opens it once, over the scan in focus or for the scans set apart, and the pick closes it. The tiles' dropdowns, the key row's help words, the "no value" key and the standing value list are gone; the blind, staged and System 1 marks, "Ask people about these", "Next question", the arrows and Enter stay. A one-answer question has the same shape, with **other…** as its second side. Apply writes each tile's answer as before; the engine is unchanged.
+
 ## [1.0.0-beta.9] - 2026-11-09
 
 The ninth desk beta is the fifth UX round, from the first evening on Review's new first page with the three model passes' proposals. Answer on an axis card lands on a grid of exactly the scans it counted, and the Questions page is cards under Review's head; a commit closes on the engine's answer and the page follows the re-sort to its end; a model's unsure proposals are reviewed as a dense grid of pictures, filtered by value and confidence, and accepted in one move; "Read the N" asks how many and which first; a campaign's page opens on its one next action with people named by name; and the cards, the confirm and the grid's hover speak a person's words. Most of it shows with engine 1.0.0-beta.11; the engine floor is unchanged.

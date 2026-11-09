@@ -2,11 +2,12 @@
 /* Review round 1 (record 56 section 6.3): the few questions the sort leaves
    to a person, as cards in plain words and as a grid of each question's
    scans. Colour by border only: a scan's tile is framed in the colour of
-   NILS's answer (the theme's value tokens, slotted by the axis's own order,
-   so a value keeps its colour everywhere), a question that needs a person
-   has the caution bar, and of the keys offered only the chosen one takes its
-   value's colour. The grid's page grows with the screen as the gallery's
-   does (proportional, not bigger buttons). Theme tokens only. */
+   the answer it will get (the theme's value tokens, slotted by the axis's
+   own order, so a value keeps its colour everywhere), a question that needs
+   a person has the caution bar, and the two answers are chips framed in
+   their colours, the one every scan gets filled. The grid's page grows with
+   the screen as the gallery's does (proportional, not bigger buttons). Theme
+   tokens only. */
 
 /* ------------------------------------------------------------ the questions as cards */
 /* The Questions page (UX round 5) draws Review's cards (work.css) under Review's head; a question's card has
@@ -16,6 +17,10 @@
 .questions .q-none { margin: 0; }
 
 /* ------------------------------------------------------------ the grid's page */
+/* The grid reads like the gallery (UX round 6): the head, one bar, the pictures. The bar holds the two
+   answers as coloured chips that are buttons (the one every scan gets filled, the other outlined), the
+   "other…" chip, the ? chip with the keys behind it, the tally and Apply; nothing else stands between
+   the head and the pictures. */
 .page:has(.qgrid-page) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }
 .qgrid-page { --reader-scale: clamp(1, min(tan(atan2(100vw, 1440px)), tan(atan2(100vh, 850px))), 1.5); display: flex; flex-direction: column; gap: 0.45rem; flex: 1; min-height: 0; min-width: 0; }
 .qgrid-page > :not(.qgrid-full) { zoom: var(--reader-scale); }
@@ -24,44 +29,50 @@
 .qgrid-head h1 { margin: 0; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.35rem; line-height: 1.2; }
 .qgrid-head .meta { overflow-wrap: anywhere; }
 
-.qgrid-bar { display: flex; align-items: center; gap: 0.4rem 0.6rem; flex-wrap: wrap; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
+.qgrid-bar { position: relative; display: flex; align-items: center; gap: 0.4rem 0.6rem; flex-wrap: wrap; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
 .qgrid-bar .q-keys { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; min-width: 0; }
-.qgrid-bar .q-help { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
 .qgrid-page kbd { display: inline-block; min-width: 1.1em; margin-right: 0.3rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 11px; line-height: 1.35; text-align: center; color: var(--n-text-faint); }
 .qgrid-page .button kbd { margin: 0 0 0 0.35rem; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
-.q-tally { font-size: var(--n-text-size-small); font-variant-numeric: tabular-nums; color: var(--n-text-faint); white-space: nowrap; }
+/* the two answers: each chip framed in its value's colour, as the gallery's legend, since the tiles are framed
+   the same; the answer every scan gets is filled, with the thick bar and heavier words (campaigns.css .opt.on) */
+.qgrid-bar .q-chip[data-slot]:not(.on) { border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: transparent; color: var(--n-text); }
+.qgrid-bar .q-chip.on[data-slot] kbd { border-color: var(--vc); color: var(--n-text); }
+.qgrid-bar .q-help { min-width: 1.75rem; justify-content: center; padding: 0 0.4rem; color: var(--n-text-dim); cursor: help; }
+.q-tally { font-size: var(--n-text-size-small); font-variant-numeric: tabular-nums; color: var(--n-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .q-tally b { color: var(--n-text); font-weight: 500; }
 
-/* the axis's full list, for key 0: a row of values to choose from, not a dialog */
-.q-list { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.4rem 0.55rem; border: 1px solid var(--n-line); border-left: 3px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
-.q-list .meta { align-self: center; margin-right: 0.3rem; }
+/* the axis's whole list, for 0: a popover of values to choose from, once, over the scan in focus or under
+   the bar for the scans set apart; the pick closes it */
+.q-pop { position: absolute; z-index: 6; display: flex; flex-wrap: wrap; align-content: start; gap: 0.25rem; padding: 0.35rem 0.45rem; border: 1px solid var(--n-line-strong); border-left: 3px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 0.4rem 1.2rem var(--n-scrim); cursor: default; }
+.q-pop .opt { min-height: 1.4rem; padding: 0 0.4rem; font-size: 12px; }
+.q-pop .q-pop-for { flex-basis: 100%; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qgrid-bar > .q-pop { top: calc(100% + 0.25rem); left: 0.55rem; max-width: calc(100% - 1.1rem); }
+.q-tile > .q-pop { inset: 0.3rem 0.3rem auto 0.3rem; max-height: calc(100% - 0.6rem); overflow: auto; }
 
 .qgrid-said { margin: 0; }
 .qgrid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 0.5rem; align-content: start; padding: 2px; }
 
-/* a tile: the scan's picture and NILS's answer as its frame */
+/* a tile: the scan's picture, framed in the colour of the answer it will get, that word in its corner, its name */
 .q-tile { position: relative; display: grid; gap: 0.2rem; align-content: start; padding: 0.3rem; border: 1px solid var(--n-line); border-left: 5px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; min-width: 0; }
 .q-tile[data-slot] { border: 1px solid var(--vc); border-left: 5px solid var(--vc); }
-/* NILS has no answer: the caution colour, dashed */
-.q-tile.none { border-color: var(--n-caution-line); border-style: dashed; border-left-style: solid; }
-/* a blind tile shows nothing of NILS's: neutral */
-.q-tile.blind { border-color: var(--n-gated-line); }
+/* set apart: it stays open, so no answer's colour; the caution colour, dashed */
+.q-tile.apart { border-color: var(--n-caution-line); border-style: dashed; border-left-style: solid; background: var(--n-bg-sunken); }
+/* no value: neutral, dashed */
+.q-tile.nothing { border-color: var(--n-neutral-line); border-style: dashed; border-left-style: solid; }
 .q-tile.focused { outline: 2px solid var(--n-focus); outline-offset: 1px; }
-/* System 1 agrees with NILS: the tile steps back, so the ones it disputes stand out */
-.q-tile.dim:not(.focused):not(.apart) { opacity: 0.55; }
-.q-tile.apart { background: var(--n-bg-sunken); box-shadow: inset 0 0 0 2px var(--n-brand-icon); }
+/* System 1 agrees with NILS: the tile steps back, so the ones it disputes stand out; a tile the person set does not */
+.q-tile.dim:not(.focused):not(.own) { opacity: 0.55; }
 .q-pic { position: relative; display: flex; justify-content: center; align-items: center; height: 108px; overflow: hidden; background: var(--n-image-bg); border-radius: var(--n-radius); }
 .q-pic img { max-width: 100%; max-height: 108px; height: auto; }
 .q-pic .q-blank { color: var(--n-text-faint); font-size: 12px; }
 .q-pic .q-mark { position: absolute; display: inline-flex; align-items: center; gap: 0.25rem; max-width: calc(100% - 0.6rem); padding: 0 0.3rem; border-radius: var(--n-radius); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.q-pic .q-s1 { left: 0.3rem; bottom: 0.3rem; border: 1px solid var(--vc, var(--n-neutral-line)); border-left: 3px solid var(--vc, var(--n-neutral-line)); background: var(--vc-bg, var(--n-neutral-bg)); color: var(--n-text); }
+.q-pic .q-s1 { left: 0.3rem; bottom: 0.3rem; max-width: calc(55% - 0.3rem); border: 1px solid var(--vc, var(--n-neutral-line)); border-left: 3px solid var(--vc, var(--n-neutral-line)); background: var(--vc-bg, var(--n-neutral-bg)); color: var(--n-text); }
 .q-pic .q-staged { left: 0.3rem; top: 0.3rem; border: 1px solid var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); }
 .q-pic .q-blind { left: 0.3rem; top: 0.3rem; border: 1px solid var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); }
-.q-line { display: flex; align-items: center; gap: 0.35rem; min-width: 0; font-size: 13px; }
-.q-nils { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.q-tile.none .q-nils { color: var(--n-caution-fg); font-weight: 400; }
-.q-to { display: inline-flex; align-items: center; gap: 0.25rem; min-width: 0; margin-left: auto; }
-.q-to select { max-width: 7.5rem; font-size: 12px; }
+/* the answer the scan will get, in the picture's corner, in its colour */
+.q-pic .q-answer { right: 0.3rem; bottom: 0.3rem; max-width: calc(60% - 0.3rem); border: 1px solid var(--vc, var(--n-neutral-line)); border-left: 3px solid var(--vc, var(--n-neutral-line)); background: var(--vc-bg, var(--n-bg-raised)); color: var(--n-text); font-weight: 600; }
+.q-tile.apart .q-answer { border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); font-weight: 500; }
+.q-tile.nothing .q-answer { font-weight: 400; }
 .q-name { font-family: var(--n-font-mono); font-size: 11px; color: var(--n-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .q-rule { font-size: 11px; color: var(--n-text-dim); overflow-wrap: anywhere; }
 
@@ -74,11 +85,13 @@
   .qgrid { overflow: visible; }
 }
 @media (max-width: 640px) {
-  /* two scans a row on a phone, so a page is read at a glance */
+  /* two scans a row on a phone, so a page is read at a glance; the tally takes its own line */
   .qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
   .q-pic { height: 88px; }
   .q-pic img { max-height: 88px; }
-  .qgrid-bar .q-help { display: none; }
+  .qgrid-bar .q-tally { flex-basis: 100%; order: 1; }
+  .qgrid-bar .grow { display: none; }
+  .q-pic .q-mark { font-size: 10px; }
 }
 .qgrid-done { display: grid; gap: 0.6rem; justify-items: start; }
 
