@@ -42,6 +42,7 @@ import {
   mayAccept,
   moved,
   openList,
+  listedOf,
   pageOf,
   paletteOf,
   rangeApart,
@@ -182,8 +183,10 @@ describe("the grid's state", () => {
     expect(s.listing).toBeNull();
     s = openList(s);
     expect(s.listing).toBe("apart");
+    // the list is for the ones still without a value (and the focus): the scan corrected to brain already is not swept along
+    expect(listedOf(s)).toEqual([1004, 1005, 1006]);
     s = chooseValue(s, "neck");
-    expect(s.corrections).toEqual({ 1003: "neck", 1004: "neck", 1005: "neck", 1006: "neck" });
+    expect(s.corrections).toEqual({ 1003: "brain", 1004: "neck", 1005: "neck", 1006: "neck" });
     expect(tally(s)).toMatchObject({ accept: 5, corrected: 4, apart: 0 });
     // the corner of a scan not in focus opens the list for that scan alone
     expect(openList(s, 1008)).toMatchObject({ listing: 1008, focus: 1008, apart: { 1003: true, 1004: true, 1005: true, 1006: true, 1008: true } });

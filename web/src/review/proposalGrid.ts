@@ -353,15 +353,20 @@ export function openList(s: GridState, forStack: number | null = null): GridStat
   const focus = forStack ?? s.focus;
   if (focus === null || !s.page.scans.some((x) => x.stack === focus)) return s;
   const apart: Record<number, true> = focus in s.apart ? s.apart : { ...s.apart, [focus]: true as const };
-  const want: number | "apart" = focus in s.apart && Object.keys(s.apart).length > 1 ? "apart" : focus;
+  const want: number | "apart" = focus in s.apart && listedOf({ ...s, apart, focus }).length > 1 ? "apart" : focus;
   return { ...s, apart, focus, anchor: focus, listing: s.listing === want ? null : want };
+}
+
+/** The scans a list for "the set apart" is for: the ones set apart and still without a value, and the focus; a scan that has its value already is not swept along. */
+export function listedOf(s: GridState): number[] {
+  return apartOf(s).filter((stack) => !(stack in s.corrections) || stack === s.focus);
 }
 
 /** The list's pick: the value for what the list is open for; the list closes. */
 export function chooseValue(s: GridState, value: string): GridState {
   if (s.listing === null) return s;
   let out: GridState = { ...s, listing: null };
-  if (s.listing === "apart") for (const stack of apartOf(s)) out = setCorrection(out, stack, value);
+  if (s.listing === "apart") for (const stack of listedOf(s)) out = setCorrection(out, stack, value);
   else out = setCorrection(out, s.listing, value);
   return out;
 }

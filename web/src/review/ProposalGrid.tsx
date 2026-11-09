@@ -30,7 +30,7 @@ import {
   acceptedFollowLine,
   acceptedWords,
   type Accepted,
-  apartOf,
+  listedOf,
   bandWords,
   chooseValue,
   closeList,
@@ -530,7 +530,7 @@ function ValueList({ state: s, palette, onState }: { state: GridState; palette: 
   const forApart = s.listing === "apart";
   const stack = typeof s.listing === "number" ? s.listing : s.focus;
   const have = forApart ? null : stack !== null ? s.corrections[stack] ?? null : null;
-  const count = forApart ? apartOf(s).length : 1;
+  const count = forApart ? listedOf(s).length : 1;
   const who = forApart ? `the ${n(count)} set apart` : `scan ${stack}`;
   // the list opens to the right of the tile's corner; at the grid's right edge it opens to the left instead
   const el = useRef<HTMLDivElement | null>(null);
