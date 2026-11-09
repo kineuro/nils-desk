@@ -26,6 +26,10 @@ export interface ReviewSummary {
   by_kind: Record<string, number>;
   cohorts: { name: string; open: number }[];
   none: number;
+  /** UX round 5 (engine 1.0.0-beta.11): the distinct scans the questions door asks per axis, from its own gathering; absent on an older engine. */
+  questions?: Record<string, number>;
+  /** The waiting classifier questions the door does not ask (several axes at once, a broken constraint), by kind, with their scans. */
+  not_questions?: Record<string, number>;
 }
 
 /** `GET /api/explain/{stack}`: what the command line prints, axis by axis. */

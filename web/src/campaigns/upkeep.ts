@@ -62,7 +62,8 @@ export interface LeaseLine {
 }
 
 const until = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const who = (p: string | null | undefined) => (p ? p.split("@")[0] : "someone");
+/** A person's short name where the page gives no other namer: the part before the @. */
+const shortName = (p: string | null | undefined) => (p ? p.split("@")[0] : "someone");
 
 /** Whether a rater's lease ran out by `now`, whatever state it is written in. */
 export function ranOut(a: Assignment, now: number): boolean {
@@ -81,7 +82,7 @@ export function mayRelease(caps: Capabilities, c: Campaign, a: Assignment): bool
  * two items sat open and unserved behind leases that had run out, and only the
  * database said so). Null where the item is not open or nothing holds it.
  */
-export function leaseLine(caps: Capabilities, c: Campaign, i: Item, now = Date.now()): LeaseLine | null {
+export function leaseLine(caps: Capabilities, c: Campaign, i: Item, now = Date.now(), who: (p: string | null | undefined) => string = shortName): LeaseLine | null {
   if (i.state !== "open" || c.status !== "open") return null;
   const mine = (c.assignments ?? []).filter((a) => a.item_id === i.id && a.role === "rater");
   const live = mine.filter((a) => a.state === "leased" && !ranOut(a, now));

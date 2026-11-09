@@ -19,7 +19,9 @@ import { packRoles, refusalWords, review, type PackDoc } from "./client";
 import { modelGroups, standingActs, standingDoors, type Standing } from "./modelFamily";
 import { ModelFamily } from "./ModelFamily";
 import { CommitStandingDialog, RestCampaignDialog, StandingCard } from "./ModelStanding";
+import { committedLine, followLine, resortOf, useFollowedJob, type Resort } from "./resort";
 import { PickDialog } from "./PickDialog";
+import { gridHref, gridServed } from "./proposalGrid";
 import { borderOf, borderWords, occasionWords, PICK_BORDER, rolesOffered, type Border } from "./picks";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -173,13 +175,23 @@ function ProposalStandings({ caps, acts, onChanged }: { caps: Capabilities; acts
   const [making, setMaking] = useState<Standing | null>(null);
   const [groups, setGroups] = useState(false);
   const [seen, setSeen] = useState(0);
+  // UX round 5: the re-sort a commit queued, followed until it is over; the page's line says how far
+  const [follow, setFollow] = useState<{ s: Standing; resort: Resort } | null>(null);
+  const followed = useFollowedJob(follow?.resort.job ?? null, () => {
+    again();
+    setSeen((x) => x + 1);
+  });
+  useEffect(() => {
+    if (follow) onChanged(followLine(follow.s, follow.resort, followed));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the line follows the job
+  }, [follow, followed]);
   const list = load.kind === "ready" ? load.value : [];
   return (
     <section className="stack roomy">
       <Reading load={load} what="the proposals" />
       {load.kind === "ready" && list.length === 0 && <p className="meta">Nothing proposed. A model run from Pipelines proposes its values here.</p>}
       {list.map((s) => (
-        <StandingCard key={`${s.model.id}|${s.axis}`} s={s} acts={acts} onCommit={() => setCommitting(s)} onCampaign={() => setMaking(s)} />
+        <StandingCard key={`${s.model.id}|${s.axis}`} s={s} acts={acts} onCommit={() => setCommitting(s)} onCampaign={() => setMaking(s)} reviewHref={gridServed(caps) ? gridHref(s.model.id, s.axis) : null} />
       ))}
       {load.kind === "ready" && list.length > 0 && (
         <details className="proposal-groups" onToggle={(e) => setGroups((e.target as HTMLDetailsElement).open)}>
@@ -200,11 +212,17 @@ function ProposalStandings({ caps, acts, onChanged }: { caps: Capabilities; acts
         <CommitStandingDialog
           s={committing}
           onClose={() => setCommitting(null)}
-          onDone={(w) => {
+          onDone={(answer) => {
+            const s = committing;
             setCommitting(null);
             again();
             setSeen((x) => x + 1);
-            onChanged(w);
+            const resort = resortOf(answer);
+            if (resort.job !== null) setFollow({ s, resort });
+            else {
+              setFollow(null);
+              onChanged(committedLine(s, answer));
+            }
           }}
         />
       )}

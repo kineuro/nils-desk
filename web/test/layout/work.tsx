@@ -23,6 +23,7 @@ const DOORS = [
   "GET /api/review/proposals",
   "POST /api/review/proposals/campaign",
   "POST /api/decisions/commit",
+  "GET /api/jobs/{id}",
   "GET /api/review/questions",
   "GET /api/review/questions/{key}/scans",
   "GET /api/campaigns",
@@ -46,7 +47,7 @@ const DOORS = [
 
 const caps = {
   engine: {
-    engine: { name: "nils", version: "1.0.0-alpha.80" },
+    engine: { name: "nils", version: "1.0.0-beta.11" },
     contracts: { openapi: "7" },
     doors: DOORS,
     policy: [],
@@ -95,9 +96,16 @@ const CAMPAIGNS = [
   campaign(16, "reference-ab-cert3", { kind: "axes", axes: ["base", "technique", "modifier"] }, counts(54, 0, 0), { source: { ab: { voters: ["rules", "judge"] } }, raters_per_item: 1 }),
   campaign(9, "probe-axis", { kind: "axis", axis: "base" }, counts(0, 6, 0), { status: "closed", closed_at: "2026-10-01T09:00:00Z" }),
 ];
-const SUMMARY = { by_kind: { "release.shared_name": 948, "identity.same_instance": 208, "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "body_part:decision": 14, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4, "construct:session": 7 }, cohorts: [], none: 0 };
+// UX round 5: the summary of an engine with the questions door's own count per axis (`questions`) and the kinds it does not ask (`not_questions`)
+const SUMMARY = {
+  by_kind: { "release.shared_name": 948, "identity.same_instance": 208, "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "body_part:decision": 14, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4, "construct:session": 7 },
+  questions: { body_part: 14, base: 7, construct: 7 },
+  not_questions: { "classify.asked": 5 },
+  cohorts: [],
+  none: 0,
+};
 const PROPOSALS = [
-  { model: { id: 7, name: "nils-postcontrast", version: "0.3.1" }, label: "nils-postcontrast@0.3.1", axis: "post_contrast", threshold: 0.99, staged: { groups: 89, stacks: 50006 }, held: { groups: 1, stacks: 12 }, commit: { groups: 88, stacks: 1701 }, drifted: 3, below: { groups: 4, stacks: 190 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-postcontrast-post_contrast-unsure" },
+  { model: { id: 7, name: "nils-postcontrast", version: "0.3.1" }, label: "nils-postcontrast@0.3.1", axis: "post_contrast", threshold: 0.99, staged: { groups: 89, stacks: 50006 }, held: { groups: 1, stacks: 12 }, commit: { groups: 88, stacks: 1701 }, drifted: 3, below: { groups: 4, stacks: 190, pace_s: 10.2 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-postcontrast-post_contrast-unsure" },
   { model: { id: 5, name: "nils-bodypart", version: "1.2.0" }, label: "nils-bodypart@1.2.0", axis: "body_part", threshold: 0.9, staged: { groups: 3, stacks: 40 }, held: { groups: 0, stacks: 0 }, commit: { groups: 3, stacks: 40 }, drifted: 0, below: { groups: 2, stacks: 26 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-bodypart-body_part-unsure" },
 ];
 const QUESTIONS = {
@@ -171,6 +179,7 @@ const VISITS = [0, 365, 730].map((day, i) => ({
   main: [{ role: "t1w", stack: 900 + i, name: "Sag_T1w_3D_MPRAGE_ND" }],
 }));
 const SCOPE = { kind: "registry" };
+let jobReads = 0;
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -181,6 +190,14 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/desk/people") return json(200, { people: [{ subject: "bo", display: "Bo", holds: true }, { subject: "cy", display: "Cy", holds: true }, { subject: "dee", display: "Dee", holds: false }] });
   if (p === "/api/review/summary") return json(200, SUMMARY);
   if (p === "/api/review/proposals") return json(200, { count: PROPOSALS.length, proposals: PROPOSALS });
+  // UX round 5: the commit answers at once with the re-sort queued; the job moves on each read
+  if (p === "/api/decisions/commit" && init?.method === "POST") return json(200, { committed: [1, 2, 3], items: 88, left: 1, split: [], left_out_sealed: 0, left_held: 1, resort: { state: "queued", job: 356, stacks: 1701, words: "1,701 scan(s) to sort again, queued as job 356" } });
+  if (p === "/api/jobs/356") {
+    jobReads += 1;
+    const done = Math.min(1701, jobReads * 900);
+    return json(200, { id: 356, kind: "resort", name: "re-sort after astrid@site committed 88 decision(s)", state: done >= 1701 ? "done" : "running", started_at: "2026-11-08T20:00:00Z", heartbeat_at: null, finished_at: null, progress: { done, of: 1701, what: "scans" }, error: null, args: {}, result: null });
+  }
+  if (p === "/api/review/proposals/campaign" && init?.method === "POST") return json(201, { campaign: { id: 12, name: "nils-postcontrast-post_contrast-unsure" }, adopted: 4, suggestions: { suggestions: 190 }, counts: {}, left: 0, limit: 190, order: "least_sure", seed: null });
   if (p === "/api/review/questions") return json(200, QUESTIONS);
   if (p === "/api/review") return json(200, { count: 0, items: [] });
   if (p === "/api/campaigns") return json(200, { count: CAMPAIGNS.length, campaigns: CAMPAIGNS });

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Review round 1 (record 56 section 6.3; studies/2026-10-09-review-round1,
-// DR1 and DR2): the few questions the sort leaves to a person. The list says
-// each in plain words with its distinct scans ("Which base? 7 scans") and
-// why it is asked; one click opens its grid, a page of its scans' pictures,
+// DR1 and DR2): the few questions the sort leaves to a person. The Questions
+// page says each in plain words as a card (UX round 5: under Review's head,
+// one axis or all, nothing else) with its distinct scans ("Which base? 7
+// scans") and why; Answer opens its grid, a page of its scans' pictures,
 // each framed in the colour of NILS's answer, with System 1's answer as a
 // second small mark (the tiles it agrees with step back) and a staged answer
 // marked. Two keys above the grid give the two answers in dispute, 0 the
@@ -17,16 +18,17 @@ import type { Capabilities } from "../capabilities";
 import { valueTone, chosenTone } from "../campaigns/values";
 import { ScanViewer } from "../data/ScanViewer";
 import type { Scan } from "../data/scans";
+import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { askPeopleHref, asksPeople } from "./askPeople";
+import { axisTitle } from "./work";
 import {
   answerBody,
   answeredWords,
   chooseKey,
   chooseNothing,
   chooseValue,
-  elsewhereHref,
   gridHref,
   gridOf,
   keyAct,
@@ -56,68 +58,95 @@ import {
 } from "./questions";
 import "../campaigns/campaigns.css";
 import "./questions.css";
+import "./work.css";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const scans = (v: number) => `${n(v)} ${v === 1 ? "scan" : "scans"}`;
 
-// ------------------------------------------------------------ DR1, the list
+// ------------------------------------------------------------ DR1, the questions as cards
 
-export interface QuestionsListProps {
+export interface QuestionsPageProps {
   list: QuestionList | null;
   where: Where;
   failed?: string | null;
   since?: number;
-  /** Review's first page sends a person to one axis's questions (2026-11-08): only those are listed. */
+  /** Review's first page sends a person to one axis's questions: only those are shown, under the axis's name. */
   axis?: string | null;
 }
 
-/** The questions in plain words, each with its distinct scans and why, and the way to its grid. */
-export function QuestionsList({ list, where, failed = null, since = Date.now(), axis = null }: QuestionsListProps) {
-  if (failed) return <p className="warn">The questions could not be read: {failed}</p>;
-  if (!list) return <Wait phase="reading the questions" since={since} size="line" />;
-  const elsewhere = list.elsewhere.filter((e) => e.scans > 0);
-  const shown = axis ? list.questions.filter((q) => q.axis === axis) : list.questions;
+/**
+ * The Questions page (UX round 5, 2026-11-08): under Review's head, the axis or "Scans to answer", one card per
+ * question as Review's first page draws its cards (its words, its scans, its reason, Answer), and nothing else;
+ * a dataset or cohort the page was opened for is one line under the head.
+ */
+export function QuestionsPage({ list, where, failed = null, since = Date.now(), axis = null }: QuestionsPageProps) {
+  const shown = list ? (axis ? list.questions.filter((q) => q.axis === axis) : list.questions) : [];
+  const narrowed = where.dataset ? `in dataset ${where.dataset}` : where.cohort ? `in cohort ${where.cohort}` : null;
   return (
-    <section className="questions" aria-label="Questions">
-      {shown.length === 0 ? (
-        <p className="meta q-none">{axis && list.questions.length > 0 ? `No ${axis.replaceAll("_", " ")} question waits.` : "No question waits: the rules decided every scan."}</p>
-      ) : (
-        <ul className="q-rows">
+    <section className="data review work questions" aria-label="Questions">
+      <div className="data-head">
+        <div className="grow">
+          <span className="eyebrow">
+            <a href={href("review")}>Review</a>
+          </span>
+          <h1>{axis ? axisTitle(axis) : "Scans to answer"}</h1>
+          {narrowed && (
+            <span className="meta q-where">
+              {narrowed} · <a href={narrow(href("review", "questions"), { axis })}>everywhere</a>
+            </span>
+          )}
+        </div>
+      </div>
+      {failed && <p className="warn">The questions could not be read: {failed}</p>}
+      {!list && !failed && <Wait phase="reading the questions" since={since} size="line" />}
+      {list && shown.length === 0 && (
+        <p className="meta q-none">
+          Nothing to answer here. <a href={href("review")}>Review</a>
+        </p>
+      )}
+      {shown.length > 0 && (
+        <div className="rv-grid">
           {shown.map((q) => (
-            <li key={q.key} className="q-row" data-key={q.key}>
-              <a className="q-what" href={gridHref(q.key, where)}>
-                <span className="q-words">{q.words}</span>
-                {q.reason && <span className="meta">{q.reason}</span>}
-              </a>
-              <span className="q-count">
-                <b>{n(q.scans)}</b> {q.scans === 1 ? "scan" : "scans"}
-                {q.staged > 0 && <span className="tag caution">{n(q.staged)} staged</span>}
-              </span>
-              <span className="q-act">
-                <a className="button small" href={gridHref(q.key, where)}>
+            <article key={q.key} className="rv-card answer" aria-label={q.words} data-key={q.key}>
+              <span className="rv-title">{q.words}</span>
+              <div className="rv-big">
+                <b>{n(q.scans)}</b>
+                <span>{q.scans === 1 ? "scan" : "scans"}</span>
+              </div>
+              {q.reason && <span className="rv-meta">{q.reason}</span>}
+              <div className="rv-acts">
+                <a className="button" href={gridHref(q.key, where)}>
                   Answer
                 </a>
-              </span>
-            </li>
+              </div>
+            </article>
           ))}
-        </ul>
-      )}
-      {elsewhere.map((e) => {
-        const to = elsewhereHref(e, where);
-        return (
-          <p key={e.kind} className="meta q-else">
-            {e.words}: {scans(e.scans)}
-            {to ? <a href={to}>Open</a> : " · below"}
-          </p>
-        );
-      })}
-      {list.held.scans > 0 && (
-        <p className="meta q-held">
-          {scans(list.held.scans)} {list.held.scans === 1 ? "is" : "are"} in {list.held.campaigns.length === 1 ? `campaign ${list.held.campaigns[0].name}` : `${n(list.held.campaigns.length)} campaigns`}, answered there.
-        </p>
+        </div>
       )}
     </section>
   );
+}
+
+/** The Questions page at its address: the list read for where it was opened, drawn as cards. */
+export function QuestionsRoute({ where, axis }: { where: Where; axis: string | null }) {
+  const [list, setList] = useState<QuestionList | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [since] = useState(() => Date.now());
+  const whereKey = `${where.dataset ?? ""}|${where.cohort ?? ""}`;
+  useEffect(() => {
+    let alive = true;
+    setList(null);
+    setFailed(null);
+    questions.list(where).then(
+      (l) => alive && setList(l),
+      (e: Error) => alive && setFailed(e.message),
+    );
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the scope is what reads
+  }, [whereKey]);
+  return <QuestionsPage list={list} where={where} failed={failed} since={since} axis={axis} />;
 }
 
 // ------------------------------------------------------------ DR2, the grid

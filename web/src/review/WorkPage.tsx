@@ -30,7 +30,9 @@ import { review, type ReviewSummary } from "./client";
 import { standingActs, standingDoors, type Standing } from "./modelFamily";
 import { CommitStandingDialog, RestCampaignDialog } from "./ModelStanding";
 import { questions, questionsServed, type QuestionList } from "./questions";
-import { alsoRows, alsoSummary, axisCards, campaignBand, MOVED_ON_WORDS, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
+import { gridHref, gridServed } from "./proposalGrid";
+import { committedLine, followLine, resortOf, useFollowedJob, type Resort } from "./resort";
+import { alsoRows, alsoSummary, axisCards, campaignBand, modelSub, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
 import "../campaigns/campaigns.css";
 import "./work.css";
 
@@ -56,6 +58,22 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
   const [mine, setMine] = useState<Record<number, number>>({});
   const [tick, setTick] = useState(0);
   const [said, setSaid] = useState<string | null>(null);
+  // UX round 5: the re-sort a commit queued, followed through the jobs door until it is over. The follow's line
+  // stands in for the said line only while the job runs: when the job ends, its last line becomes the said line
+  // and the follow is dropped, and anything said later goes through `say`, which drops the follow first. So a
+  // line said after a followed re-sort (another commit, a refusal) is never hidden behind the follow's.
+  const [follow, setFollow] = useState<{ s: Standing; resort: Resort } | null>(null);
+  const followed = useFollowedJob(follow?.resort.job ?? null, (job) => {
+    // `follow` here is the one whose job this is: the follower is keyed on the job, set in the same render
+    if (follow) setSaid(followLine(follow.s, follow.resort, job));
+    setFollow(null);
+    setTick((x) => x + 1);
+  });
+  /** Say a line on the page; a follow still shown gives way to it. */
+  const say = (words: string | null) => {
+    setFollow(null);
+    setSaid(words);
+  };
   const [committing, setCommitting] = useState<Standing | null>(null);
   const [reading, setReading] = useState<Standing | null>(null);
   const prefill = prefillOf(query);
@@ -188,10 +206,11 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
       mine={mine}
       since={since}
       why={why}
-      said={said}
+      said={follow ? followLine(follow.s, follow.resort, followed) : said}
       onMake={() => setMaking({ source: "selection", from: "" })}
       onCommit={acts.commit ? setCommitting : undefined}
       onRead={acts.campaign ? setReading : undefined}
+      reviewHref={gridServed(caps) ? (s) => gridHref(s.model.id, s.axis) : undefined}
     >
       {making && (
         <MakeDialog
@@ -219,9 +238,14 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
         <CommitStandingDialog
           s={committing}
           onClose={() => setCommitting(null)}
-          onDone={(w) => {
+          onDone={(answer) => {
+            const s = committing;
             setCommitting(null);
-            setSaid(w);
+            const resort = resortOf(answer);
+            if (resort.job !== null) {
+              setSaid(null);
+              setFollow({ s, resort });
+            } else say(committedLine(s, answer));
             setTick((x) => x + 1);
           }}
         />
@@ -251,11 +275,13 @@ export interface WorkBodyProps {
   onCommit?: (s: Standing) => void;
   /** Read a model's unsure answers in a campaign of one's own; absent where the person may not. */
   onRead?: (s: Standing) => void;
+  /** UX round 5: review a model's unsure answers as a grid, accepted in one move; absent where the engine has no grid. */
+  reviewHref?: (s: Standing) => string;
   children?: React.ReactNode;
 }
 
 /** The page as it draws from what it read: each band once its own reading landed, none while it has nothing. */
-export function WorkBody({ caps, summary, standings = null, qlist = null, list, mine = {}, since = null, why = [], said = null, now = Date.now(), onMake, onCommit, onRead, children }: WorkBodyProps) {
+export function WorkBody({ caps, summary, standings = null, qlist = null, list, mine = {}, since = null, why = [], said = null, now = Date.now(), onMake, onCommit, onRead, reviewHref, children }: WorkBodyProps) {
   const reviewer = reviews(caps);
   const making = makeRefusal(caps);
   const proposed = useMemo(() => sortStandings(standings ?? []).filter((s) => s.staged.stacks > 0 || s.below.stacks > 0), [standings]);
@@ -263,9 +289,9 @@ export function WorkBody({ caps, summary, standings = null, qlist = null, list, 
   const cards = useMemo(() => campaignBand(caps, list), [caps, list]);
   // the fold only where something is counted; Main scans alone has its page in the side
   const also = useMemo(() => {
-    const rows = reviewer && summary ? alsoRows(caps, summary, standings !== null) : [];
+    const rows = reviewer && summary ? alsoRows(caps, summary, standings !== null, qlist) : [];
     return rows.some((r) => (r.count ?? 0) > 0) ? rows : [];
-  }, [caps, reviewer, summary, standings]);
+  }, [caps, reviewer, summary, standings, qlist]);
   const closed = (list ?? []).filter((c) => c.status === "closed");
   const empty = since === null && proposed.length === 0 && axes.length === 0 && cards.length === 0 && also.length === 0;
   return (
@@ -303,22 +329,26 @@ export function WorkBody({ caps, summary, standings = null, qlist = null, list, 
             {proposed.map((s) => (
               <article key={`${s.model.id}|${s.axis}`} className="rv-card proposed" aria-label={standingTitle(s)}>
                 <span className="rv-title">{standingTitle(s)}</span>
+                <span className="rv-sub path">{modelSub(s)}</span>
                 <div className="rv-big">
                   <b>{n(s.staged.stacks)}</b>
                   <span>proposed</span>
                 </div>
-                <span className="rv-meta" title={s.drifted > 0 ? MOVED_ON_WORDS : undefined}>
-                  {standingMeta(s)}
-                </span>
-                {((onCommit && s.commit.stacks > 0) || (onRead && s.below.stacks > 0)) && (
+                <span className="rv-meta">{standingMeta(s)}</span>
+                {((onCommit && s.commit.stacks > 0) || ((onRead || reviewHref) && s.below.stacks > 0)) && (
                   <div className="rv-acts">
                     {onCommit && s.commit.stacks > 0 && (
                       <button type="button" className="button" onClick={() => onCommit(s)}>
                         Commit {n(s.commit.stacks)}
                       </button>
                     )}
+                    {reviewHref && s.below.stacks > 0 && (
+                      <a className="button" href={reviewHref(s)}>
+                        Review the {n(s.below.stacks)}
+                      </a>
+                    )}
                     {onRead && s.below.stacks > 0 && (
-                      <button type="button" className={onCommit && s.commit.stacks > 0 ? "button secondary" : "button"} onClick={() => onRead(s)}>
+                      <button type="button" className={(onCommit && s.commit.stacks > 0) || reviewHref ? "button secondary" : "button"} onClick={() => onRead(s)}>
                         Read the {n(s.below.stacks)}
                       </button>
                     )}

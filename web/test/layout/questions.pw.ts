@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Review round 1 in a real browser, in the desk's own shell (record 56
-// section 6.3): on a laptop and on a phone the questions read as a list in
-// plain words with nothing scrolling sideways; a question opens as a grid
+// section 6.3; UX round 5): on a laptop and on a phone the questions read as
+// cards under Review's head with nothing scrolling sideways; a question opens as a grid
 // of its scans framed by NILS's answer, the keys above it; 1 chooses the
 // answer, the arrows and space set a scan apart, Enter sends one answer for
 // the page with that scan as its exception, and the next question opens,
@@ -32,22 +32,33 @@ for (const vp of VIEWPORTS) {
   test.describe(`${vp.width} by ${vp.height}`, () => {
     test.use({ viewport: { width: vp.width, height: vp.height } });
 
-    test("the questions read as a list in plain words, each with its scans and why", async ({ page }) => {
+    test("the questions read as cards under Review's head, each with its scans and why, and nothing else", async ({ page }) => {
       await page.goto("/questions.html#review/questions?dataset=ms-a");
-      await expect(page.locator(".q-row")).toHaveCount(2);
-      await expect(page.locator(".q-row .q-words")).toHaveText(["T2w or PDw?", "Which base?"]);
-      await expect(page.locator(".q-row").nth(1)).toContainText("The rules found no base for these scans.");
-      await expect(page.locator(".q-row").nth(1).locator(".q-count")).toContainText("7 scans");
-      await expect(page.locator(".q-else")).toContainText("System 1 asks about a whole scan: 2 scans");
-      await expect(page.locator(".q-held")).toContainText("in campaign base-check");
-      // the Questions chip counts the distinct scans; what else waits sits under the list
-      await expect(page.locator(".chips.pages a.on b")).toHaveText("21");
-      await expect(page.locator("h2", { hasText: "Also waiting" })).toBeVisible();
-      for (const row of await page.locator(".q-row").all()) {
-        const b = (await row.boundingBox())!;
+      await expect(page.locator(".questions .rv-card.answer")).toHaveCount(2);
+      await expect(page.locator(".questions h1")).toHaveText("Scans to answer");
+      await expect(page.locator(".questions .data-head .eyebrow")).toHaveText("Review");
+      await expect(page.locator(".questions .q-where")).toContainText("in dataset ms-a");
+      await expect(page.locator(".rv-card.answer .rv-title")).toHaveText(["T2w or PDw?", "Which base?"]);
+      await expect(page.locator(".rv-card.answer").nth(1)).toContainText("The rules found no base for these scans.");
+      await expect(page.locator(".rv-card.answer").nth(1).locator(".rv-big")).toContainText("7");
+      await expect(page.locator(".rv-card.answer a.button")).toHaveText(["Answer", "Answer"]);
+      // the old head, its chips, the cohort chips, the zero cards and the table of what else waits are gone
+      await expect(page.locator(".chips.pages")).toHaveCount(0);
+      await expect(page.locator(".chips.cohorts")).toHaveCount(0);
+      await expect(page.locator(".needs")).toHaveCount(0);
+      await expect(page.locator("table.queue")).toHaveCount(0);
+      await expect(page.getByText("Also waiting")).toHaveCount(0);
+      await expect(page.getByText("What needs a person")).toHaveCount(0);
+      const boxes = [];
+      for (const card of await page.locator(".rv-card.answer").all()) {
+        const b = (await card.boundingBox())!;
         expect(b.x).toBeGreaterThanOrEqual(0);
         expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
+        boxes.push(b);
       }
+      // a phone stacks the cards; a laptop puts them side by side
+      if (vp.width < 640) expect(boxes[1].y).toBeGreaterThanOrEqual(boxes[0].y + boxes[0].height);
+      else expect(Math.round(boxes[1].y)).toBe(Math.round(boxes[0].y));
       await noSidewaysScroll(page, vp.width);
       await shot(page, `questions-list-${vp.name}`);
     });

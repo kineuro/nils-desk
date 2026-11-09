@@ -6,16 +6,18 @@
 // ruling 35 (d)) is the maker's and an administrator's: the answers by rater,
 // what was settled and written, the counts by value and the labels.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { mayAny } from "../grants";
+import { may, mayAny } from "../grants";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
+import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
+import { review } from "../review/client";
 import {
   adjudicatorHas,
   agreementWords,
@@ -28,15 +30,12 @@ import {
   closure,
   exportRefusal,
   itemTotal,
-  itemWords,
   kappa,
-  KIND_WORDS,
   pct,
   picturesOnly,
   principalOf,
   PURPOSE_WORDS,
   purposeOf,
-  questionWords,
   rateRefusal,
   refused as refusedWords,
   seesAnswers,
@@ -56,7 +55,9 @@ import {
 import { StateBar } from "./parts";
 import type { RaterStats as Pace } from "./reader";
 import { R48, statsFor } from "./readerDoors";
-import { RaterStats } from "./ReaderParts";
+import { paceCaveat, RaterStats } from "./ReaderParts";
+import { answerValueWords, headTone, itemName, ledeWords, nextAct, type ScanName } from "./page";
+import { ensurePeople, nameOf, namesMap, peopleKept, type Named } from "./people";
 import { galleryOffered } from "./gallery";
 import { Suggestions } from "./Suggestions";
 import { abServed, isAb } from "./ab";
@@ -93,6 +94,8 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
       .catch((e: unknown) => setLoad({ kind: "failed", why: refusedWords(e) }));
   }, [readsSets, id, caps]);
   useEffect(() => read(), [read]);
+  // people by name, read once a session (UX round 5)
+  useEffect(() => ensurePeople(caps), [caps]);
   // a close running as a job: the page reads the campaign again until it is closed (2026-11-05)
   const closing = load.kind === "ready" && closeStage(load.c) === "running" && acting !== "close";
   useEffect(() => {
@@ -104,11 +107,11 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
     (a: Assignment) => {
       campaigns
         .release(id, a.id)
-        .then((r) => setSaid((r as Assignment & { words?: string }).words ?? `Gave back ${a.principal.split("@")[0]}'s item.`))
+        .then((r) => setSaid((r as Assignment & { words?: string }).words ?? `Gave back ${nameOf(namesMap(caps, peopleKept.get().value), a.principal).name}'s item.`))
         .catch((e: unknown) => setSaid(`Not given back: ${refusedWords(e)}`))
         .finally(read);
     },
-    [id, read],
+    [id, read, caps],
   );
   const readAll = useCallback(() => {
     campaigns
@@ -196,6 +199,10 @@ export interface CampaignBodyProps {
   view?: "items" | "results";
   /** Stacks without their picture, as the make door counted them. */
   missing?: number | null;
+  /** People by name, over what the desk's people door gave (UX round 5): for a page drawn without the door. */
+  names?: ReadonlyMap<string, string>;
+  /** Each scan's name where a door gave it, by stack; the page reads them where it may. */
+  scans?: ReadonlyMap<number, ScanName>;
   onAct: (act: "close" | "export" | "raters") => void;
   /** Gives back a rater's live lease (2026-11-05). */
   onRelease?: (a: Assignment) => void;
@@ -206,8 +213,62 @@ export interface CampaignBodyProps {
   children?: React.ReactNode;
 }
 
+/** The most scans whose names the page reads, one small header read each. */
+const NAMES_READ = 50;
+
+/**
+ * The names of the scans on the rows shown (UX round 5: a row reads as the
+ * scan it is about, not "anchored:0"), from each stack's header door where the
+ * person may read it: the series description, as the grid names a card. The
+ * engine serves no door that names several stacks at once, so the page reads
+ * at most {@link NAMES_READ} headers, a few at a time, and a campaign made to
+ * show the pictures alone reads none.
+ */
+function useScanNames(enabled: boolean, stacks: readonly number[]): Map<number, ScanName> {
+  const [names, setNames] = useState<Map<number, ScanName>>(() => new Map());
+  // the stacks asked so far: each header is read once, however often the rows are drawn again while reads are out
+  const asked = useRef(new Set<number>());
+  // keyed on the rows' stacks, not on what is still unnamed: a name landing must not start the reads over
+  const key = enabled ? stacks.join(",") : "";
+  useEffect(() => {
+    if (key === "") return;
+    const queue = [...new Set(stacks)].filter((s) => !asked.current.has(s)).slice(0, Math.max(0, NAMES_READ - asked.current.size));
+    if (queue.length === 0) return;
+    for (const s of queue) asked.current.add(s);
+    let alive = true;
+    const read = async () => {
+      while (alive) {
+        const s = queue.shift();
+        if (s === undefined) return;
+        const h = await review.header(s).catch(() => null);
+        const d = h?.texts?.series_description;
+        const got: ScanName = { description: typeof d === "string" && d.trim() ? d.trim() : null, code: null };
+        // merged as it lands, even when the rows changed meanwhile: the name is the stack's, whatever row shows it
+        setNames((m) => new Map(m).set(s, got));
+      }
+    };
+    void Promise.all(Array.from({ length: 6 }, read));
+    return () => {
+      alive = false;
+      // not started yet: free to be asked by the rows drawn next
+      for (const s of queue) asked.current.delete(s);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stacks are read through `key`
+  }, [key]);
+  return names;
+}
+
+/** A person by name, the principal cut short on hover; never a whole hash. */
+export function Who({ named }: { named: Named }) {
+  return (
+    <span className="who" title={named.title ?? undefined}>
+      {named.name}
+    </span>
+  );
+}
+
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, onRelease, onReadAll, onAskOne, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, names: given, scans: givenScans, onAct, onRelease, onReadAll, onAskOne, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   // record 55, ruling 35 (d): the results, where the person may read them
   const results = resultsRefusal(caps, c) === null;
@@ -231,54 +292,80 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
   // an open item's lease, for the campaign's maker and those who read every answer (2026-11-05)
   const leases = !blind || c.owner === principalOf(caps);
   const alone = aloneWords(c);
-  // the raters by name to the maker and a Review worker, by number to anyone else; the account's name where the pace door gives it (record 58 P1)
+  // people by name (UX round 5): the desk's people, the person's own name, the pace door's names, and what the page was given
+  const people = useKept(peopleKept).value;
   const accountNames = new Map((stats?.raters ?? []).flatMap((r) => (r.name ? [[r.principal, r.name] as [string, string]] : [])));
-  const who = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c), accountNames);
+  const names = namesMap(caps, people, new Map([...accountNames, ...(given ?? [])]));
+  const who = (p: string | null | undefined) => nameOf(names, p);
+  // the raters by name to the maker and a Review worker, by number to anyone else
+  const raterLabels = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c), names);
+  const raterOf = (p: string): Named => (namesRaters(caps, c) || p === principalOf(caps) ? who(p) : { name: raterLabels.get(p) ?? who(p).name, title: null });
   // a check (job type 3) has one next action: go on checking while results are open, close and write the checks once none is
   const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
   for (const x of answers ?? []) byItem.set(x.item_id, [...(byItem.get(x.item_id) ?? []), x]);
   const rows = shown.slice(0, ROWS);
-  const names = useCheckNames(isCheck(c) ? rows : [], byItem);
-  // a check's answer in words: the verdict and the flagged parts by name, never its form's fields
+  const partNames = useCheckNames(isCheck(c) ? rows : [], byItem);
+  // each row named by its scan: the series description from the stack's header, where the person may read it and the campaign shows header text
+  const readsNames = served(caps, "GET /api/stacks/{stack}/header") && may(caps, "review:see") && !picturesOnly(c) && c.grain !== "session";
+  const scanNames = useScanNames(readsNames && !givenScans, rows.flatMap((i) => (i.stack_id !== null && i.stack_id !== undefined && !i.blind ? [i.stack_id] : [])));
+  const scanOf = (i: Item): ScanName | null => (i.stack_id === null || i.stack_id === undefined ? null : ((givenScans ?? scanNames).get(i.stack_id) ?? null));
+  // a check's answer in words: the verdict and the flagged parts by name, never its form's fields; any other as the value's word
   const reasons = isCheck(c) ? checkQuestionOf(c).reasons : null;
-  const words = (i: Item) => (x: Pick<Answer, "value" | "form" | "derivative_id">) => (reasons ? checkAnswerLine(x.value, x.form, reasons, i.derivative_id ? (names.get(i.derivative_id) ?? null) : null) : answerWords(x));
+  const words = (i: Item) => (x: Pick<Answer, "value" | "form" | "derivative_id">) => {
+    if (reasons) return checkAnswerLine(x.value, x.form, reasons, i.derivative_id ? (partNames.get(i.derivative_id) ?? null) : null);
+    if (x.form || (x.derivative_id !== null && x.derivative_id !== undefined)) return answerWords(x);
+    return answerValueWords(c, x.value, () => answerWords(x));
+  };
+  const next = nextAct(caps, c, { results, href });
+  const tone = headTone(c);
+  const caveat = stats ? paceCaveat(stats) : null;
   return (
-    <section className="data campaign">
-      <div className="data-head">
+    <section className={`data campaign tone-${tone}`}>
+      <div className="data-head campaign-head">
         <div className="grow">
           <span className="eyebrow">
             <a href={href("review")}>Review</a>
           </span>
           <h1>{c.name}</h1>
           <p className="lede">
-            {KIND_WORDS[c.question.kind] ?? c.question.kind}: {questionWords(c.question)} <span className={c.status === "open" ? "tag ok" : "tag"}>{c.status}</span>
+            {ledeWords(caps, c, names)} <span className={c.status === "open" ? "tag ok" : c.status === "closing" ? "tag caution" : "tag"}>{c.status}</span>
           </p>
         </div>
         {check?.head}
-        {rate && !check && (
-          <a className="button" href={href("review", "campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
-            {ab ? "Settle" : pair ? "Read pairs" : anchored ? "Read against anchors" : "Rate"}
+        {(next.kind === "read" || next.kind === "settle") && (
+          <a className="button next" href={next.href} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
+            {next.words}
           </a>
         )}
-        {rate && !ab && !pair && !anchored && !check && galleryOffered(caps, c.question) && (
-          <a className="button secondary" href={href("review", "campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
-            Gallery
-          </a>
-        )}
-        {adjudicate && (
-          <a className="button" href={check ? `${href("review", "campaigns", String(c.id), "check")}?as=adjudicator` : href("review", "campaigns", String(c.id), "adjudicate")}>
-            Adjudicate
-          </a>
-        )}
-        {c.status === "open" && close === null && !check?.closes && (
-          <button type="button" className={check ? "button quiet" : "button secondary"} onClick={() => onAct("close")}>
+        {next.kind === "close" && (
+          <button type="button" className="button next" onClick={() => onAct("close")}>
             Close
           </button>
         )}
-        {stage === "stopped" && close === null && (
-          <button type="button" className="button" title="the close stopped part way; run again, it writes what the first did not" onClick={() => onAct("close")}>
+        {next.kind === "close-again" && (
+          <button type="button" className="button next" title="the close stopped part way; run again, it writes what the first did not" onClick={() => onAct("close")}>
             Run the close again
+          </button>
+        )}
+        {next.kind === "results" && view !== "results" && (
+          <button type="button" className="button next" onClick={() => setView("results")}>
+            Results
+          </button>
+        )}
+        {rate && !ab && !pair && !anchored && !check && galleryOffered(caps, c.question) && (
+          <a className="button secondary small" href={href("review", "campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
+            Gallery
+          </a>
+        )}
+        {adjudicate && next.kind !== "settle" && (
+          <a className="button secondary small" href={check ? `${href("review", "campaigns", String(c.id), "check")}?as=adjudicator` : href("review", "campaigns", String(c.id), "adjudicate")}>
+            Adjudicate
+          </a>
+        )}
+        {c.status === "open" && close === null && next.kind !== "close" && !check?.closes && (
+          <button type="button" className={check ? "button quiet small" : "button secondary small"} onClick={() => onAct("close")}>
+            Close
           </button>
         )}
         {check?.closes && c.status === "open" && close === null && (
@@ -287,13 +374,18 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           </button>
         )}
         {c.status === "closed" && close === null && (
-          <button type="button" className="button" title="a later close writes each refused item that can be written now, as any close does" onClick={() => onAct("close")}>
+          <button type="button" className="button secondary small" title="a later close writes each refused item that can be written now, as any close does" onClick={() => onAct("close")}>
             Close again
           </button>
         )}
         {exp === null && (
-          <button type="button" className="button secondary" onClick={() => onAct("export")}>
+          <button type="button" className="button secondary small" onClick={() => onAct("export")}>
             Export
+          </button>
+        )}
+        {ratersRefusal(caps, c) === null && (
+          <button type="button" className="button secondary small" aria-label="Change the raters" onClick={() => onAct("raters")}>
+            Change raters
           </button>
         )}
       </div>
@@ -306,7 +398,7 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
       {stage === "running" && (
         <p className="meta said" role="status">
           <Icon name="clock" />
-          Closing{c.close_job?.by ? ` (started by ${c.close_job.by.split("@")[0]})` : ""}: {closingWords(c)} The page follows it.
+          Closing{c.close_job?.by ? ` (started by ${who(c.close_job.by).name})` : ""}: {closingWords(c)} The page follows it.
         </p>
       )}
       {stage === "stopped" && (
@@ -319,15 +411,6 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           {w.why}
         </p>
       ))}
-      <Values
-        cells={[
-          { k: "items", v: n(itemTotal(c.counts)) },
-          { k: "raters each", v: String(c.raters_per_item) },
-          { k: "answers", v: n(c.counts.answers) },
-          { k: "exact", v: pct(a?.exact), title: agreementWords(a) },
-          { k: "κ", v: kappa(a?.cohen_kappa ?? a?.fleiss_kappa), title: a?.cohen_kappa !== null && a?.cohen_kappa !== undefined ? "Cohen's kappa" : "Fleiss' kappa" },
-        ]}
-      />
       <StateBar counts={c.counts} />
       {c.status === "open" && (c.counts.items.open ?? 0) > 0 && missingModes(caps, c).map((w) => (
         <p key={w} className="meta mode-missing">
@@ -350,14 +433,6 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
         </p>
       )}
       {check && <CheckPanel caps={caps} campaign={c} />}
-      {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
-        <p className="meta">
-          By axis:{" "}
-          {Object.entries(a.per_axis)
-            .map(([axis, x]) => `${axis} ${pct(x.exact)}${x.cant_tell ? ` (${n(x.cant_tell)} can't tell)` : ""}`)
-            .join(" · ")}
-        </p>
-      )}
       {a?.unsure ? (
         <p className="meta">
           {n(a.unsure)} {a.unsure === 1 ? "answer" : "answers"} marked unsure, for a second look.
@@ -374,105 +449,119 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           </div>
         </div>
       )}
-      <dl className="facts">
-        <div className="facts-pair">
-          <dt>source</dt>
-          <dd>
-            {sourceWords(c.source)}
-            {c.handle_id !== null && ` · handle ${c.handle_id}`} · {c.grain}s
-          </dd>
-        </div>
-        <div className="facts-pair">
-          <dt>raters</dt>
-          <dd>
-            {c.rater_policy.raters.length > 0 ? c.rater_policy.raters.join(", ") : "anyone with work on Campaigns"}
-            {ratersRefusal(caps, c) === null && (
-              <button type="button" className="button quiet small raters-change" aria-label="Change the raters" onClick={() => onAct("raters")}>
-                Change
-              </button>
-            )}
-          </dd>
-        </div>
-        <div className="facts-pair">
-          <dt>adjudicators</dt>
-          <dd>{c.rater_policy.adjudicators.length > 0 ? c.rater_policy.adjudicators.join(", ") : "anyone with work on Campaigns"}</dd>
-        </div>
-        <div className="facts-pair">
-          <dt>adjudicated</dt>
-          <dd>
-            {c.adjudication.when === "never" ? "never" : c.adjudication.when === "always" ? "always" : "on disagreement"} · {c.adjudication.metric}
-            {c.adjudication.metric !== "exact" && c.adjudication.threshold !== null && c.adjudication.threshold !== undefined && ` below ${c.adjudication.threshold}`}
-          </dd>
-        </div>
-        {(c.question.kind === "axis" || c.question.kind === "axes") && (
+      <details className="campaign-details">
+        <summary>Details</summary>
+        <Values
+          cells={[
+            { k: "items", v: n(itemTotal(c.counts)) },
+            { k: "raters each", v: String(c.raters_per_item) },
+            { k: "answers", v: n(c.counts.answers) },
+            { k: "exact", v: pct(a?.exact), title: agreementWords(a) },
+            { k: "κ", v: kappa(a?.cohen_kappa ?? a?.fleiss_kappa), title: a?.cohen_kappa !== null && a?.cohen_kappa !== undefined ? "Cohen's kappa" : "Fleiss' kappa" },
+          ]}
+        />
+        <dl className="facts">
           <div className="facts-pair">
-            <dt>suggests</dt>
+            <dt>source</dt>
             <dd>
-              {SUGGEST_WORDS[suggestOf(c)].words} · {SUGGEST_WORDS[suggestOf(c)].says}
+              {sourceWords(c.source)}
+              {c.handle_id !== null && ` · handle ${c.handle_id}`} · {c.grain}s
             </dd>
           </div>
-        )}
-        {purposeOf(c) !== "decide" && (
           <div className="facts-pair">
-            <dt>for</dt>
+            <dt>raters</dt>
+            <dd>{c.rater_policy.raters.length > 0 ? <People list={c.rater_policy.raters} who={who} /> : "anyone with work on Campaigns"}</dd>
+          </div>
+          <div className="facts-pair">
+            <dt>adjudicators</dt>
+            <dd>{c.rater_policy.adjudicators.length > 0 ? <People list={c.rater_policy.adjudicators} who={who} /> : "anyone with work on Campaigns"}</dd>
+          </div>
+          <div className="facts-pair">
+            <dt>adjudicated</dt>
             <dd>
-              {PURPOSE_WORDS[purposeOf(c)].words} · {PURPOSE_WORDS[purposeOf(c)].says}
+              {c.adjudication.when === "never" ? "never" : c.adjudication.when === "always" ? "always" : "on disagreement"} · {c.adjudication.metric}
+              {c.adjudication.metric !== "exact" && c.adjudication.threshold !== null && c.adjudication.threshold !== undefined && ` below ${c.adjudication.threshold}`}
             </dd>
           </div>
-        )}
-        {c.planted && (
+          {(c.question.kind === "axis" || c.question.kind === "axes") && (
+            <div className="facts-pair">
+              <dt>suggests</dt>
+              <dd>
+                {SUGGEST_WORDS[suggestOf(c)].words} · {SUGGEST_WORDS[suggestOf(c)].says}
+              </dd>
+            </div>
+          )}
+          {purposeOf(c) !== "decide" && (
+            <div className="facts-pair">
+              <dt>for</dt>
+              <dd>
+                {PURPOSE_WORDS[purposeOf(c)].words} · {PURPOSE_WORDS[purposeOf(c)].says}
+              </dd>
+            </div>
+          )}
+          {c.planted && (
+            <div className="facts-pair">
+              <dt>planted</dt>
+              <dd>
+                {Math.round(c.planted.share * 100)} % of the items · {n(c.planted.count)} planted · {c.planted.opened ? "the list opened at the close" : "the list stays sealed until the close"}
+              </dd>
+            </div>
+          )}
+          {picturesOnly(c) && (
+            <div className="facts-pair">
+              <dt>shows</dt>
+              <dd>the pictures alone · no series name, sequence or other header text beside them</dd>
+            </div>
+          )}
           <div className="facts-pair">
-            <dt>planted</dt>
+            <dt>closes into</dt>
+            <dd>{CLOSES_WORDS[c.closes_into] ?? c.closes_into}</dd>
+          </div>
+          <div className="facts-pair">
+            <dt>lease</dt>
+            <dd>{Math.round(c.lease_seconds / 60)} min</dd>
+          </div>
+          <div className="facts-pair">
+            <dt>made</dt>
             <dd>
-              {Math.round(c.planted.share * 100)} % of the items · {n(c.planted.count)} planted · {c.planted.opened ? "the list opened at the close" : "the list stays sealed until the close"}
+              <Who named={who(c.owner)} /> · {day(c.created_at)}
+              {c.pack_version && ` · ${c.pack_version}`}
             </dd>
           </div>
+          {c.closed_at && (
+            <div className="facts-pair">
+              <dt>closed</dt>
+              <dd>
+                {c.closed_by ? <Who named={who(c.closed_by)} /> : ""} · {day(c.closed_at)}
+              </dd>
+            </div>
+          )}
+        </dl>
+        {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
+          <p className="meta">
+            By axis:{" "}
+            {Object.entries(a.per_axis)
+              .map(([axis, x]) => `${axis} ${pct(x.exact)}${x.cant_tell ? ` (${n(x.cant_tell)} can't tell)` : ""}`)
+              .join(" · ")}
+          </p>
         )}
-        {picturesOnly(c) && (
-          <div className="facts-pair">
-            <dt>shows</dt>
-            <dd>the pictures alone · no series name, sequence or other header text beside them</dd>
-          </div>
+        {close !== null && c.status !== "closed" && <p className="meta">{close}</p>}
+        {sets.length > 0 && (
+          <p className="meta">
+            Label sets:{" "}
+            {sets.map((s, i) => (
+              <span key={s.id}>
+                {i > 0 && ", "}
+                <a href={href("review", "label-sets", String(s.id))}>
+                  {s.name} v{s.version}
+                </a>
+              </span>
+            ))}
+          </p>
         )}
-        <div className="facts-pair">
-          <dt>closes into</dt>
-          <dd>{CLOSES_WORDS[c.closes_into] ?? c.closes_into}</dd>
-        </div>
-        <div className="facts-pair">
-          <dt>lease</dt>
-          <dd>{Math.round(c.lease_seconds / 60)} min</dd>
-        </div>
-        <div className="facts-pair">
-          <dt>made</dt>
-          <dd>
-            {c.owner} · {day(c.created_at)}
-            {c.pack_version && ` · ${c.pack_version}`}
-          </dd>
-        </div>
-        {c.closed_at && (
-          <div className="facts-pair">
-            <dt>closed</dt>
-            <dd>
-              {c.closed_by ?? ""} · {day(c.closed_at)}
-            </dd>
-          </div>
-        )}
-      </dl>
-      {close !== null && c.status !== "closed" && <p className="meta">{close}</p>}
-      {sets.length > 0 && (
-        <p className="meta">
-          Label sets:{" "}
-          {sets.map((s, i) => (
-            <span key={s.id}>
-              {i > 0 && ", "}
-              <a href={href("review", "label-sets", String(s.id))}>
-                {s.name} v{s.version}
-              </a>
-            </span>
-          ))}
-        </p>
-      )}
-      {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
+        {caveat && <p className="meta pace-caveat">Pace: {caveat}.</p>}
+      </details>
+      {stats && stats.raters.length > 0 && <RaterStats stats={stats} who={(p) => raterOf(p)} caveat={false} />}
       {results && (
         <div className="chips" role="tablist">
           <button type="button" role="tab" className={view === "items" ? "opt on" : "opt"} aria-selected={view === "items"} onClick={() => setView("items")}>
@@ -504,7 +593,7 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           <thead>
             <tr>
               <th className="num">#</th>
-              <th>Item</th>
+              <th>Scan</th>
               <th>State</th>
               <th>Answers</th>
               <th>Outcome</th>
@@ -512,7 +601,7 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           </thead>
           <tbody>
             {rows.map((i) => (
-              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} who={who} lease={leases ? leaseLine(caps, c, i) : null} onRelease={onRelease} />
+              <ItemRow key={i.id} item={i} name={itemName(i, c, scanOf(i))} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} who={raterOf} lease={leases ? leaseLine(caps, c, i, Date.now(), (p) => who(p).name) : null} onRelease={onRelease} />
             ))}
           </tbody>
         </table>
@@ -530,6 +619,20 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
       )}
       {children}
     </section>
+  );
+}
+
+/** Several people by name, comma separated. */
+function People({ list, who }: { list: readonly string[]; who: (p: string) => Named }) {
+  return (
+    <>
+      {list.map((p, i) => (
+        <span key={p}>
+          {i > 0 && ", "}
+          <Who named={who(p)} />
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -560,17 +663,19 @@ function useCheckNames(rows: Item[], byItem: Map<number, Answer[]>): Map<number,
   return names;
 }
 
-function ItemRow({ item: i, answers, blind, words = answerWords, check = false, who, lease = null, onRelease }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean; who: Map<string, string>; lease?: LeaseLine | null; onRelease?: (a: Assignment) => void }) {
+function ItemRow({ item: i, name, answers, blind, words = answerWords, check = false, who, lease = null, onRelease }: { item: Item; name: { name: string; title: string }; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean; who: (p: string) => Named; lease?: LeaseLine | null; onRelease?: (a: Assignment) => void }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   return (
-    <tr>
+    <tr className={`item-row s-${tone || "open"}`}>
       <td className="num">{i.position + 1}</td>
       <td>
-        {itemWords(i)}
+        <span className="item-name" title={name.title}>
+          {name.name}
+        </span>
         {i.round > 1 && <span className="meta"> · round {i.round}</span>}
       </td>
       <td>
-        <span className={tone ? `tag ${tone}` : "tag"}>{stateWords(i.state)}</span>
+        <span className="item-state">{stateWords(i.state)}</span>
         {lease && (
           <span className="meta lease">
             {" "}
@@ -590,7 +695,7 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false, 
             ? `${answers.length} ${answers.length === 1 ? "answer" : "answers"}`
             : answers.map((a) => (
               <span key={a.id} className={check ? "answer-chip is-check" : "answer-chip"} title={a.why ?? undefined}>
-                {who.get(a.principal) ?? a.principal.split("@")[0]}
+                <Who named={who(a.principal)} />
                 {a.role === "adjudicator" ? " (adj.)" : ""} {words(a)}
                 {a.unsure ? " · unsure" : ""}
               </span>

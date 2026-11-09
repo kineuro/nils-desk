@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review round 1's layout check (record 56 section 6.3): the real desk, its
-// top bar and side, on Review's Questions for one dataset and on a
-// question's grid, against a fake engine that gathers its questions as the
+// Review round 1's layout check (record 56 section 6.3; UX round 5): the real
+// desk, its top bar and side, on Review's Questions for one dataset, drawn as
+// cards under Review's head, and on a question's grid, against a fake engine that gathers its questions as the
 // engine's doors do: "T2w or PDw?" over twelve scans with System 1's
 // answers, "Which base?" over seven with one answer staged and one read
 // blind first, a question about whole scans answered on Asked, three scans
@@ -64,7 +64,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     w.left[answer[1]] = skipped.length;
     return json(200, answered(answer[1], body.stacks, skipped.length, skipped));
   }
-  if (path === "/api/review/summary") return json(200, { by_kind: { "base:missing": 1, "base:disagree": 1, "identity.collision": 1 }, cohorts: [], none: 0 });
+  if (path === "/api/review/summary") return json(200, { by_kind: { "base:missing": 1, "base:disagree": 1, "identity.collision": 1 }, cohorts: [], none: 0, questions: { base: 19 }, not_questions: { "classify.asked": 2 } });
   if (path === "/api/review") return json(200, { count: ITEMS.length, items: ITEMS });
   if (path === "/api/campaigns") return json(200, { campaigns: [] });
   if (path === "/api/sources") return json(200, { count: 1, window_days: 30, sources: [{ id: 3, name: "ms-a" }] });

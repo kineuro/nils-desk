@@ -16,10 +16,10 @@ import { href, narrow } from "../routes";
 import { adjudicatorHas, itemTotal, ownCampaign, purposeOf, questionWords, rateRefusal, type Campaign } from "../campaigns/client";
 import { knownToolName } from "../settings/software";
 import type { ReviewSummary } from "./client";
-import { REASONS, queueHref, reasonWords } from "./filter";
+import { REASONS, reasonWords } from "./filter";
 import { isModelKind, type Standing } from "./modelFamily";
 import { PICK_BORDER } from "./picks";
-import { gridHref, listHref, type QuestionList, type Where } from "./questions";
+import { gridHref, kindsAnswered, listHref, type QuestionList, type Where } from "./questions";
 import { kindOf, kindWords } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -57,27 +57,45 @@ export function axisTitle(axis: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** A model as a person names it: the friendly name of a NILS model where the software table has one, else its name, then its version. */
+/**
+ * A model as a person names it (UX round 5, finding 2): by the family its name starts with, after any `nils-` or
+ * repository prefix: a body-part model is "Body part model", a post-contrast one "Post-contrast model", System 1
+ * "System 1"; any other model keeps its name. The registry's name@version goes under it (`modelSub`).
+ */
 export function modelWords(s: Pick<Standing, "model" | "label">): string {
-  const name = knownToolName(s.model.name) ?? s.model.name;
-  return s.model.version ? `${name} ${s.model.version}` : name;
+  const raw = s.model.name.toLowerCase();
+  const last = raw.split("/").pop() ?? raw;
+  const bare = last.replace(/^nils[-_]/u, "");
+  if (bare.startsWith("bodypart") || bare.startsWith("body-part") || bare.startsWith("body_part")) return "Body part model";
+  if (bare.startsWith("postcontrast") || bare.startsWith("post-contrast") || bare.startsWith("post_contrast")) return "Post-contrast model";
+  if (bare.startsWith("system1") || bare.startsWith("system-1") || bare.startsWith("system_1")) return "System 1";
+  return knownToolName(s.model.name) ?? s.model.name;
+}
+
+/** The model inside a sentence: "the body part model", "System 1", or a model's own name. */
+export function modelInWords(s: Pick<Standing, "model" | "label">): string {
+  const words = modelWords(s);
+  if (words === "System 1") return words;
+  return words.endsWith(" model") ? `the ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words;
+}
+
+/** The registry's own name of the model, for the small line under a person's words: name@version. */
+export function modelSub(s: Pick<Standing, "model" | "label">): string {
+  return s.label || (s.model.version ? `${s.model.name}@${s.model.version}` : s.model.name);
 }
 
 // ------------------------------------------------------------ band 1: proposed by models
 
-/** A card's title: the axis, then the model. */
+/** A card's title: the axis, then the model as a person names it. */
 export function standingTitle(s: Standing): string {
   return `${axisTitle(s.axis)} · ${modelWords(s)}`;
 }
-
-/** The words behind "moved on", on hover: the commit dialog's own. */
-export const MOVED_ON_WORDS = "Some were proposed before the data changed; committed as proposed.";
 
 /** A card's one line: how many are sure and at what, how many unsure, and what waits elsewhere. */
 export function standingMeta(s: Standing): string {
   const parts = [`${n(s.commit.stacks)} sure${s.threshold === null ? "" : ` at ${s.threshold.toFixed(2)} or above`}`, `${n(s.below.stacks)} unsure`];
   if (s.held.stacks > 0) parts.push(`${n(s.held.stacks)} in a campaign already`);
-  if (s.drifted > 0) parts.push(`${n(s.drifted)} moved on`);
+  if (s.drifted > 0) parts.push(`${n(s.drifted)} proposed before the data changed`);
   return parts.join(" · ");
 }
 
@@ -126,30 +144,39 @@ export function reasonLine(reason: string, count: number): string {
     case "low_confidence":
       return `${c} where the rules are not confident`;
     case "session":
-      return `${c} session ${count === 1 ? "question" : "questions"}`;
+      return `${c} where the session says otherwise`;
     default:
       return `${c} where ${reasonWords(reason)}`;
   }
 }
 
-/** Where one kind of the sort's questions is answered without the questions doors: a question's list, narrowed. */
-function kindHref(kind: string): string {
-  const k = kindOf(kind);
-  if (SORT_WHY.includes(k.what) || k.what === "session") return narrow(href("review", "questions"), { axis: k.area });
-  return queueHref({ axis: k.area, reason: k.what, border: null });
+/**
+ * Whether the questions door asks a kind of the summary, so the axis cards count it and the fold leaves it out.
+ * A new engine says so itself: its summary's `questions` counts every axis the door asks about, and
+ * `not_questions` names the classifier kinds it does not. An older engine's summary says nothing, so only a kind
+ * the list's questions carry is asked; the rest goes to the fold. A card never counts what its Answer cannot show.
+ */
+export function askedHere(kind: string, summary: ReviewSummary | null, list: QuestionList | null): boolean {
+  if (summary?.questions) {
+    const k = kindOf(kind);
+    return axisKind(kind) && !(kind in (summary.not_questions ?? {})) && (summary.questions[k.area] ?? 0) > 0;
+  }
+  return kindsAnswered(list).has(kind);
 }
 
 /**
- * The axis cards: the questions the engine gathered (one card per axis, its scans summed, the way to its one
- * question's grid or to the list narrowed to the axis), with the summary's kinds about the axis that the
- * questions do not carry (a session's, an older engine's) counted under them; with no questions doors, the
- * summary's kinds alone. The most scans first.
+ * The axis cards (UX round 5, 2026-11-08): one card per axis, counting the distinct scans the questions door
+ * asks about it. A new engine's summary says that count (`questions`, from the door's own gathering); an older
+ * engine's does not, and the list's questions on the axis are summed instead. Never the summary's `by_kind` alone:
+ * a kind the door does not ask is the fold's, however the summary counts it. The reasons come from the list's
+ * questions on the axis, else from the summary's kinds about it. Answer opens the one question's grid where the
+ * axis has one, else the Questions page narrowed to the axis. The most scans first.
  */
 export function axisCards(list: QuestionList | null, summary: ReviewSummary | null, where: Where = {}): AxisCard[] {
-  const by = new Map<string, { scans: number; reasons: Map<string, number>; keys: string[]; kinds: Set<string> }>();
+  const by = new Map<string, { scans: number; reasons: Map<string, number>; keys: string[] }>();
   const axisOf = (axis: string) => {
     let a = by.get(axis);
-    if (!a) by.set(axis, (a = { scans: 0, reasons: new Map(), keys: [], kinds: new Set() }));
+    if (!a) by.set(axis, (a = { scans: 0, reasons: new Map(), keys: [] }));
     return a;
   };
   const sorted = [...(list?.questions ?? [])].sort((p, q) => q.scans - p.scans);
@@ -158,29 +185,29 @@ export function axisCards(list: QuestionList | null, summary: ReviewSummary | nu
     a.scans += q.scans;
     a.keys.push(q.key);
     for (const [kind, count] of Object.entries(q.kinds)) {
-      a.kinds.add(kind);
       const what = kindOf(kind).what;
       a.reasons.set(what, (a.reasons.get(what) ?? 0) + count);
     }
   }
-  const extra: { axis: string; kind: string; count: number }[] = [];
-  for (const [kind, count] of Object.entries(summary?.by_kind ?? {})) {
-    if (count <= 0 || !axisKind(kind)) continue;
-    const k = kindOf(kind);
-    if (by.get(k.area)?.kinds.has(kind)) continue;
-    const a = axisOf(k.area);
-    a.scans += count;
-    a.reasons.set(k.what, (a.reasons.get(k.what) ?? 0) + count);
-    extra.push({ axis: k.area, kind, count });
+  if (summary?.questions) {
+    for (const [axis, scans] of Object.entries(summary.questions)) {
+      if (scans <= 0) continue;
+      const a = axisOf(axis);
+      // the engine's count of distinct scans stands over the list's sum
+      a.scans = scans;
+      if (a.reasons.size === 0) {
+        for (const [kind, count] of Object.entries(summary.by_kind)) {
+          const k = kindOf(kind);
+          if (count > 0 && k.area === axis && askedHere(kind, summary, list)) a.reasons.set(k.what, (a.reasons.get(k.what) ?? 0) + count);
+        }
+      }
+    }
   }
   return [...by.entries()]
     .filter(([, a]) => a.scans > 0)
     .map(([axis, a]) => {
       const reasons = [...a.reasons.entries()].sort((p, q) => q[1] - p[1]).map(([r, c]) => reasonLine(r, c));
-      let to: string;
-      if (a.keys.length === 1) to = gridHref(a.keys[0], where);
-      else if (a.keys.length > 1) to = narrow(listHref(where), { axis });
-      else to = kindHref(extra.filter((e) => e.axis === axis).sort((p, q) => q.count - p.count)[0].kind);
+      const to = a.keys.length === 1 ? gridHref(a.keys[0], where) : narrow(listHref(where), { axis });
       return { axis, title: axisTitle(axis), scans: a.scans, meta: reasons.join(" · "), href: to };
     })
     .sort((p, q) => q.scans - p.scans || p.title.localeCompare(q.title));
@@ -292,6 +319,7 @@ export function alsoWords(kind: string): string {
   if (kind === "classify.asked") return "What System 1 asks";
   if (kind === PICK_BORDER) return "Occasions a pick run doubts";
   if (isModelKind(kind)) return `${axisTitle(k.area)}: scans a model proposes`;
+  if (k.classifier) return `${axisTitle(k.area)}: scans where ${k.what === "session" ? "the session says otherwise" : k.what === "vote" ? "the neighbours vote otherwise" : reasonWords(k.what)}`;
   return kindWords(kind);
 }
 
@@ -302,6 +330,8 @@ export function alsoHref(kind: string): string {
   if (kind === "classify.asked") return href("review", "asked");
   if (isModelKind(kind)) return href("review", "proposals");
   if (k.area === "identity" || k.area === "linkage") return href("review", "identifiers");
+  // a classifier question the questions door does not ask is worked in the queue, narrowed to its axis
+  if (k.classifier) return narrow(href("review"), { axis: k.area, reason: (REASONS as readonly string[]).includes(k.what) ? k.what : undefined });
   return href("review", "questions");
 }
 
@@ -316,12 +346,13 @@ export interface AlsoRow {
 
 /**
  * The fold's rows: every kind of the summary that no band above shows (a campaign's items are answered there,
- * the sort's questions are band 2, a model's proposals band 1 where the engine counts them), the most first,
- * then Main scans for a person who may open the page.
+ * the questions the door asks are band 2, a model's proposals band 1 where the engine counts them), the most
+ * first, then Main scans for a person who may open the page. A classifier kind the questions door does not ask
+ * (an older engine's session questions, a kind it cannot key) is a row here, in plain words, never a card.
  */
-export function alsoRows(caps: Capabilities, summary: ReviewSummary | null, proposals: boolean): AlsoRow[] {
+export function alsoRows(caps: Capabilities, summary: ReviewSummary | null, proposals: boolean, list: QuestionList | null = null): AlsoRow[] {
   const rows: AlsoRow[] = Object.entries(summary?.by_kind ?? {})
-    .filter(([kind, count]) => count > 0 && !heldKind(kind) && !axisKind(kind) && !(proposals && isModelKind(kind)))
+    .filter(([kind, count]) => count > 0 && !heldKind(kind) && !askedHere(kind, summary, list) && !(proposals && isModelKind(kind)))
     .map(([kind, count]) => ({ key: `kind:${kind}`, words: alsoWords(kind), count, href: alsoHref(kind) }))
     .sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.words.localeCompare(b.words));
   if (may(caps, "review:see") && served(caps, "GET /api/picks/rules")) rows.push({ key: "main-scans", words: "Main scans · each dataset's and cohort's picks", count: null, href: href("review", "picks") });

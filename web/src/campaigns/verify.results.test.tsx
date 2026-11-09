@@ -68,8 +68,9 @@ describe("the campaign page of a verify campaign", () => {
     const html = renderToStaticMarkup(<CampaignBody caps={caps} campaign={verify} answers={[]} sets={[]} stats={statsOf(STATS_VERIFY as unknown as Json)} onAct={none} />);
     expect(html).toContain("<dt>for</dt><dd>Verify · ");
     expect(html).toContain("<dt>planted</dt><dd>10 % of the items · 25 planted · the list stays sealed until the close</dd>");
-    // the pace table by account name
-    expect(html).toContain(`<td title="${READER_A}">Astrid</td>`);
+    // the pace table by account name, the subject cut to its first 8 characters on hover (UX round 5: never a whole hash)
+    expect(html).toContain(`<td title="${READER_A.slice(0, 8)}…">Astrid</td>`);
+    expect(html).not.toContain(`title="${READER_A}"`);
   });
 
   it("offers Results where the door is", () => {

@@ -12,9 +12,11 @@ import {
   forgetOrigins,
   fromLine,
   heldAxes,
+  hoverLine,
   originsFor,
   originsOf,
   originTitle,
+  originWords,
   originTone,
   runLink,
   staleAxes,
@@ -158,10 +160,23 @@ describe("each origin in words", () => {
       ["body_part", unsorted],
       ["base", { ...rules, axis: "base", values: ["T2w"], rules: [{ rule_set: "base", rule: "t2_words" }] }],
     ]);
+    // UX round 5, finding 8: a person's words, never the kind path or the rule's name
     expect(originTitle(axes, SORTED).split("\n")).toEqual([
-      "weighting T2w: Rules mri@1.4.0 · base/t2_words",
-      "body part spine: Rules mri@1.4.0 · body_part/spine_words · Decided neck; sorted before the decision",
+      "Weighting: T2w · from the header (rules 1.4.0)",
+      "Body part: spine · from the header (rules 1.4.0) · Decided neck; sorted before the decision",
     ]);
     expect(axisWord("body_part")).toBe("Body part");
+  });
+
+  it("says where a label came from in a person's words, for the hover", () => {
+    expect(originWords(rules, SORTED)).toBe("from the header (rules 1.4.0)");
+    expect(originWords(rules, null)).toBe("from the header (rules)");
+    expect(originWords(model, SORTED)).toBe("model, 0.97 (run 12)");
+    expect(originWords({ ...model, decided: { ...model.decided, model: { id: 7, label: "bodypart@2.1" } } }, SORTED)).toBe("model");
+    expect(originWords({ ...person, state: "current" }, SORTED)).toBe("decided by anna@lab on 5 Nov");
+    expect(originWords({ ...person, state: "current", from: { kind: "agent" }, decided: { ...person.decided, by: undefined } }, SORTED)).toBe("decided by an agent on 5 Nov");
+    expect(originWords({ ...rules, origin: "none", values: [] }, SORTED)).toBe("nothing answered it");
+    expect(hoverLine("Body part", model, SORTED)).toBe("Body part: brain · model, 0.97 (run 12)");
+    expect(hoverLine("Contrast", { ...rules, axis: "post_contrast", values: ["yes"] }, SORTED)).toMatch(/^Contrast: .+ · from the header \(rules 1\.4\.0\)$/u);
   });
 });

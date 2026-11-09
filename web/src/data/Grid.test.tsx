@@ -551,8 +551,9 @@ describe("the dataset viewer's grid", () => {
     expect(asked("/api/origins?")).toEqual(["/api/origins?session=34"]);
     const spine = el.querySelector('.vw-scan[data-stack="14"]')!;
     expect(spine.querySelector(".vw-tag.stale")?.textContent).toBe("decided neck");
-    expect(spine.getAttribute("title")).toContain("body part spine: Rules mri@1.4.0 · body_part/spine_words · Decided neck; sorted before the decision");
-    expect(el.querySelector('.vw-scan[data-stack="11"]')!.getAttribute("title")).toContain("weighting T1w: Rules mri@1.4.0 · base/t1_words");
+    // UX round 5, finding 8: the hover says each label in a person's words, never the kind path or the rule's name
+    expect(spine.getAttribute("title")).toContain("Body part: spine · from the header (rules 1.4.0) · Decided neck; sorted before the decision");
+    expect(el.querySelector('.vw-scan[data-stack="11"]')!.getAttribute("title")).toContain("Weighting: T1w · from the header (rules 1.4.0)");
     expect(text(".vw-scan .vw-tag.stale")).toEqual(["decided neck"]);
     expect(el.querySelector(".vw-stale span")?.textContent).toBe("1 scan was sorted before its decision");
     const again = [...el.querySelectorAll<HTMLButtonElement>(".vw-stale button")].find((b) => b.textContent === "Sort the visit again")!;
@@ -563,7 +564,7 @@ describe("the dataset viewer's grid", () => {
     expect(asked("/api/origins?")).toEqual(["/api/origins?session=34", "/api/origins?session=34"]);
     expect(el.querySelector(".vw-tag.stale")).toBeNull();
     expect(el.querySelector(".vw-stale")).toBeNull();
-    expect(el.querySelector('.vw-scan[data-stack="14"]')!.getAttribute("title")).toContain("body part neck: Decided by anna@lab");
+    expect(el.querySelector('.vw-scan[data-stack="14"]')!.getAttribute("title")).toContain("Body part: neck · decided by anna@lab");
   });
 
   it("offers no re-sort to who may not run a sort, and reads no origins where the engine has no door", async () => {

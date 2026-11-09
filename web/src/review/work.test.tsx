@@ -21,8 +21,8 @@ import { fromCampaigns, parse } from "../routes";
 import { button, dialogs, settle } from "../../test/safeWayIn";
 import { familyOf, itemWords, kindTag } from "./client";
 import { fakeEngine } from "./mainScans.fixture";
-import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDING_ROWS, STANDINGS, SUMMARY } from "./work.fixture";
-import { alsoRows, alsoSummary, alsoWords, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
+import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDINGS, STANDING_ROWS, SUMMARY, SUMMARY_OLD } from "./work.fixture";
+import { alsoRows, alsoSummary, alsoWords, askedHere, axisCards, axisTitle, campaignBand, heldCount, modelInWords, modelSub, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
 import { WorkBody, WorkPage } from "./WorkPage";
 
 const list = (listed as { campaigns: Campaign[] }).campaigns;
@@ -37,14 +37,23 @@ describe("the words", () => {
     expect(axisTitle("post_contrast")).toBe("Post-contrast");
     expect(axisTitle("body_part")).toBe("Body part");
     expect(axisTitle("body_region")).toBe("Body region");
-    expect(modelWords(STANDINGS[0])).toBe("NILS post-contrast model 0.3.1");
-    expect(modelWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head 2");
-    expect(modelWords({ model: { id: 9, name: "region-head", version: "" }, label: "region-head" })).toBe("region-head");
-    expect(standingTitle(STANDINGS[0])).toBe("Post-contrast · NILS post-contrast model 0.3.1");
+    // UX round 5, finding 2: the model as a person names it, by its family; the registry's name@version under it
+    expect(modelWords(STANDINGS[0])).toBe("Post-contrast model");
+    expect(modelWords(STANDINGS[1])).toBe("Body part model");
+    expect(modelWords({ model: { id: 9, name: "bodypart-fusion-coarse", version: "r7" }, label: "bodypart-fusion-coarse@r7" })).toBe("Body part model");
+    expect(modelWords({ model: { id: 9, name: "postcontrast-cascade", version: "c1-fs3-m" }, label: "postcontrast-cascade@c1-fs3-m" })).toBe("Post-contrast model");
+    expect(modelWords({ model: { id: 9, name: "kineuro/nils-system1", version: "0.2" }, label: "kineuro/nils-system1@0.2" })).toBe("System 1");
+    expect(modelWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head");
+    expect(modelSub(STANDINGS[0])).toBe("nils-postcontrast@0.3.1");
+    expect(modelInWords(STANDINGS[0])).toBe("the post-contrast model");
+    expect(modelInWords({ model: { id: 9, name: "nils-system1", version: "1" }, label: "nils-system1@1" })).toBe("System 1");
+    expect(modelInWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head");
+    expect(modelSub({ model: { id: 9, name: "region-head", version: "2" }, label: "" })).toBe("region-head@2");
+    expect(standingTitle(STANDINGS[0])).toBe("Post-contrast · Post-contrast model");
   });
 
-  it("say a model's line: sure at the threshold, unsure, in a campaign already, moved on", () => {
-    expect(standingMeta(STANDINGS[0])).toBe("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+  it("say a model's line: sure at the threshold, unsure, in a campaign already, proposed before the data changed", () => {
+    expect(standingMeta(STANDINGS[0])).toBe("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 proposed before the data changed");
     expect(standingMeta(STANDINGS[1])).toBe("59 sure at 0.90 or above · 0 unsure");
     expect(standingMeta({ ...STANDINGS[1], threshold: null })).toBe("59 sure · 0 unsure");
     expect(sortStandings([STANDINGS[1], STANDINGS[0]]).map((s) => s.axis)).toEqual(["post_contrast", "body_part"]);
@@ -55,7 +64,7 @@ describe("the words", () => {
     expect(reasonLine("decision", 14)).toBe("14 where a decision disagrees");
     expect(reasonLine("vote", 5)).toBe("5 where the rules disagree");
     expect(reasonLine("disagree", 12)).toBe("12 where the rules and System 1 disagree");
-    expect(reasonLine("session", 1)).toBe("1 session question");
+    expect(reasonLine("session", 1)).toBe("1 where the session says otherwise");
     expect(reasonLine("conflict", 2000)).toBe("2,000 where the rules conflict");
   });
 
@@ -73,12 +82,14 @@ describe("the words", () => {
     expect(alsoWords("classify.asked")).toBe("What System 1 asks");
     expect(alsoWords("pick.border")).toBe("Occasions a pick run doubts");
     expect(alsoWords("body_part:model")).toBe("Body part: scans a model proposes");
+    expect(alsoWords("construct:session")).toBe("Construct: scans where the session says otherwise");
+    expect(alsoWords("body_part:decision")).toBe("Body part: scans where a decision disagrees");
     expect(alsoWords("something.odd")).toBe("something odd");
   });
 });
 
 describe("the scans to answer", () => {
-  it("one card per axis from the questions, the reasons summed by their counts, one click to the scans", () => {
+  it("one card per axis counting what the engine's summary says the door asks, the reasons from the questions, one click to the scans", () => {
     const cards = axisCards(QUESTIONS, SUMMARY);
     expect(cards.map((c) => [c.title, c.scans])).toEqual([
       ["Body part", 20],
@@ -89,27 +100,56 @@ describe("the scans to answer", () => {
     ]);
     const by = Object.fromEntries(cards.map((c) => [c.axis, c]));
     expect(by.body_part.meta).toBe("14 where a decision disagrees · 5 where the rules disagree · 1 with no value");
-    // several questions on the axis: the list, narrowed to it
+    // several questions on the axis: the Questions page, narrowed to it
     expect(by.body_part.href).toBe("#review/questions?axis=body_part");
     // one question: its grid
     expect(by.post_contrast.href).toBe("#review/questions/post_contrast%3Amissing");
-    // a session's questions, which the questions doors do not carry, under their axis
-    expect(by.construct.meta).toBe("7 session questions");
-    expect(by.construct.href).toBe("#review/questions?axis=construct");
+    expect(by.construct.meta).toBe("7 where the session says otherwise");
+    expect(by.construct.href).toBe("#review/questions/construct%3Afs%7Cnone");
     expect(by.base.meta).toBe("12 where the rules and System 1 disagree · 7 with no value");
   });
 
-  it("without the questions doors, the summary's kinds by axis", () => {
-    const cards = axisCards(null, SUMMARY);
-    expect(cards.map((c) => [c.title, c.scans, c.meta])).toEqual([
-      ["Body part", 19, "14 where a decision disagrees · 5 where the rules disagree"],
-      ["Base", 7, "7 with no value"],
-      ["Construct", 7, "7 session questions"],
-      ["Modifier", 4, "4 session questions"],
+  it("counts the engine's distinct scans, never the questions' sum or by_kind", () => {
+    // a scan asked twice on body part: the door counts it once, the list's rows sum to 20
+    const cards = axisCards(QUESTIONS, { ...SUMMARY, questions: { ...SUMMARY.questions, body_part: 14 } });
+    expect(cards.find((c) => c.axis === "body_part")?.scans).toBe(14);
+    // the list still reading: the counts from the summary, the reasons from its kinds about the axis
+    const alone = axisCards(null, SUMMARY);
+    expect(alone.map((c) => [c.title, c.scans, c.meta])).toEqual([
+      ["Body part", 20, "14 where a decision disagrees · 5 where the rules disagree"],
+      ["Base", 19, "7 with no value"],
+      ["Construct", 7, "7 where the session says otherwise"],
+      ["Modifier", 4, "4 where the session says otherwise"],
+      ["Post-contrast", 3, ""],
     ]);
-    expect(cards[0].href).toBe("#review/questions?axis=body_part");
+    expect(alone[0].href).toBe("#review/questions?axis=body_part");
+    // an axis the door asks nothing about is no card, whatever by_kind holds
+    expect(axisCards(QUESTIONS, { ...SUMMARY, questions: { body_part: 0 } }).map((c) => c.axis)).toEqual(["body_part", "base", "construct", "modifier", "post_contrast"]);
+    expect(axisCards(null, { ...SUMMARY, questions: {} })).toEqual([]);
+  });
+
+  it("with an older engine's summary, the questions alone; never by_kind alone", () => {
+    const cards = axisCards(QUESTIONS, SUMMARY_OLD);
+    expect(cards.map((c) => [c.title, c.scans])).toEqual([
+      ["Body part", 20],
+      ["Base", 19],
+      ["Construct", 7],
+      ["Modifier", 4],
+      ["Post-contrast", 3],
+    ]);
+    expect(axisCards(null, SUMMARY_OLD)).toEqual([]);
     expect(axisCards(null, null)).toEqual([]);
-    expect(axisCards({ ...QUESTIONS, questions: [] }, { by_kind: { "campaign.axis": 3 }, cohorts: [], none: 0 })).toEqual([]);
+    expect(axisCards({ ...QUESTIONS, questions: [] }, { by_kind: { "campaign.axis": 3, "body_part:decision": 14 }, cohorts: [], none: 0 })).toEqual([]);
+  });
+
+  it("knows which kinds the door asks: the engine's word where it has one, else the questions' kinds", () => {
+    expect(askedHere("body_part:decision", SUMMARY, null)).toBe(true);
+    expect(askedHere("classify.asked", SUMMARY, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:model", SUMMARY, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:decision", { ...SUMMARY, questions: { base: 7 } }, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:decision", SUMMARY_OLD, QUESTIONS)).toBe(true);
+    expect(askedHere("construct:session", SUMMARY_OLD, { ...QUESTIONS, questions: QUESTIONS.questions.filter((q) => q.axis !== "construct") })).toBe(false);
+    expect(askedHere("construct:session", SUMMARY_OLD, null)).toBe(false);
   });
 
   it("the queue's own count leaves the campaigns' items out, and a campaign's item is a family of its own", () => {
@@ -178,6 +218,13 @@ describe("what else waits", () => {
     const older = alsoRows(caps, SUMMARY, false);
     expect(older.find((r) => r.key === "kind:body_part:model")).toMatchObject({ words: "Body part: scans a model proposes", count: 59, href: "#review/proposals" });
     expect(alsoSummary(older)).toBe("Also waiting: 1,245 subjects, files and checks");
+    // an older engine's summary: a kind the questions do not carry is a row here, in plain words, worked in the queue
+    const before = alsoRows(caps, SUMMARY_OLD, true, { ...QUESTIONS, questions: QUESTIONS.questions.filter((q) => q.axis !== "construct" && q.axis !== "modifier") });
+    expect(before.find((r) => r.key === "kind:construct:session")).toMatchObject({ words: "Construct: scans where the session says otherwise", count: 7, href: "#review?axis=construct" });
+    expect(before.some((r) => r.key === "kind:body_part:decision")).toBe(false);
+    expect(alsoRows(caps, SUMMARY_OLD, true, QUESTIONS).some((r) => r.key.endsWith(":session"))).toBe(false);
+    // and with no questions read at all, every classifier kind waits here
+    expect(alsoRows(caps, SUMMARY_OLD, true).some((r) => r.key === "kind:body_part:decision")).toBe(true);
     // no Main scans without its door
     expect(alsoRows(capsFor({ doors: DOORS, principal: ME }), SUMMARY, true).some((r) => r.key === "main-scans")).toBe(false);
   });
@@ -194,9 +241,10 @@ describe("the page", () => {
     expect(html).not.toContain("<h1>Work</h1>");
     expect(bands(html)).toEqual(["Proposed by models", "Scans to answer", "Campaigns"]);
     // band 1: two cards, the most proposed first, with Commit and Read on the card
-    expect(cards(html, "proposed")).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    expect(cards(html, "proposed")).toEqual(["Post-contrast · Post-contrast model", "Body part · Body part model"]);
+    expect(html).toContain('<span class="rv-sub path">nils-postcontrast@0.3.1</span>');
     expect(html).toContain("<b>50,006</b><span>proposed</span>");
-    expect(html).toContain("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+    expect(html).toContain("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 proposed before the data changed");
     expect(html).toContain(">Commit 1,701</button>");
     expect(html).toContain(">Read the 190</button>");
     expect(html).toContain(">Commit 59</button>");
@@ -313,6 +361,61 @@ describe("a reviewer's page", () => {
     host.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("drops a finished follow when something else is said: a later line replaces the re-sort's last", async () => {
+    // the follow reads the job every few seconds: the clock is moved by hand
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const committed = new Set<string>();
+    let jobReads = 0;
+    const e = fakeEngine((c) => {
+      if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: SUMMARY };
+      if (c.method === "GET" && c.path === "/api/review/proposals") {
+        const rows = STANDING_ROWS.filter((r) => !committed.has(String((r as { axis: string }).axis)));
+        return { status: 200, body: { count: rows.length, proposals: rows } };
+      }
+      if (c.method === "GET" && c.path === "/api/review/questions") return { status: 200, body: QUESTIONS_RAW };
+      if (c.method === "GET" && c.path === "/api/campaigns") return { status: 200, body: { count: CAMPAIGNS.length, campaigns: CAMPAIGNS } };
+      if (c.method === "GET" && /\/api\/campaigns\/\d+\/mine$/u.test(c.path)) return { status: 200, body: { count: 0, total: 0, values: {}, answers: [] } };
+      if (c.method === "POST" && c.path === "/api/decisions/commit") {
+        const axis = String(c.body?.axis);
+        committed.add(axis);
+        // the first commit queues its re-sort as a job; the second answers as an older engine, its words inline
+        if (axis === "post_contrast") return { status: 200, body: { committed: [1], items: 88, left: 1, split: [], resort: { state: "queued", job: 356, stacks: 1701, words: "1,701 scan(s) to sort again, queued as job 356" } } };
+        return { status: 200, body: { committed: [2], items: 3, left: 0, split: [], resort: { state: "done", stacks: 59, words: "re-sorted 59 scans" } } };
+      }
+      if (c.method === "GET" && c.path === "/api/jobs/356") {
+        jobReads += 1;
+        const done = jobReads === 1 ? 900 : 1701;
+        return { status: 200, body: { id: 356, kind: "resort", name: "re-sort", state: done < 1701 ? "running" : "done", progress: { done, of: 1701, what: "scans" }, error: null, result: null } };
+      }
+      return undefined;
+    });
+    await act(async () => root.render(<WorkPage caps={caps} />));
+    await settle(8);
+    act(() => button(host, "Commit 1,701")!.click());
+    act(() => button(host.querySelector<HTMLDialogElement>("dialog[open]")!, "Commit 1,701")!.click());
+    await settle(8);
+    expect(host.querySelector(".said")?.textContent).toMatch(/^Committed 1,701 post-contrast answers · (sorting them again \(job 356\)|900 of 1,701 sorted again \(job 356\))$/u);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    await settle(8);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post-contrast answers · 1,701 of 1,701 sorted again");
+    expect(jobReads).toBe(2);
+    // the follow is over; the next commit's line replaces its last line
+    act(() => button(host, "Commit 59")!.click());
+    act(() => button(host.querySelector<HTMLDialogElement>("dialog[open]")!, "Commit 59")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/decisions/commit").map((c) => c.body?.axis)).toEqual(["post_contrast", "body_part"]);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 59 body part answers. Re-sorted 59 scans.");
+    // the job is not read again once its follow is dropped
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    expect(jobReads).toBe(2);
+    expect(host.querySelector(".rv-card.proposed")).toBeNull();
   });
 
   it("commits a model's sure answers from its card through the confirm, says what it did, and reads the page again", async () => {
@@ -331,7 +434,7 @@ describe("a reviewer's page", () => {
     });
     await act(async () => root.render(<WorkPage caps={caps} />));
     await settle(8);
-    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Post-contrast · Post-contrast model", "Body part · Body part model"]);
     act(() => button(host, "Commit 1,701")!.click());
     const d = host.querySelector<HTMLDialogElement>("dialog[open]")!;
     expect(d.querySelector("h2")?.textContent).toBe("Commit at or above the threshold");
@@ -339,8 +442,8 @@ describe("a reviewer's page", () => {
     await settle(8);
     expect(e.of("POST", "/api/decisions/commit").map((c) => c.body)).toEqual([{ model: "7", axis: "post_contrast", anyway: true }]);
     expect(host.querySelector("dialog[open]")).toBeNull();
-    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post_contrast answers of nils-postcontrast@0.3.1. Re-sorted 1,701 scans.");
-    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Body part · NILS body part model 1.2.0"]);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post-contrast answers. Re-sorted 1,701 scans.");
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Body part · Body part model"]);
     // Read opens the campaign of the rest, which asks only its name
     act(() => button(host, "Read the 26")?.click());
     expect(e.of("GET", "/api/review/proposals").length).toBeGreaterThanOrEqual(2);
