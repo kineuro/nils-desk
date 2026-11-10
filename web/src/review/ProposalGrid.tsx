@@ -7,9 +7,26 @@
 // one; one primary button accepts the page but the exceptions, in the
 // person's name with the model's probability beside each decision, and the
 // next page loads. Nothing about the exceptions is written. One quiet line
-// says where the page stands. No dialog.
+// says where the page stands. No dialog. UX round 6, item 4: a set-apart
+// scan the person can name takes its value: 0 or the tile's corner opens the
+// axis's value list once over the tile (the question grid's popover), for
+// that scan or for every scan set apart, the pick frames the tile in the
+// value's colour with the word in its corner, and the one Accept writes the
+// corrections beside the rest. Only where the engine says what values the
+// axis takes; an older engine's grid is as before. The axis's values sit on
+// the number keys as the gallery's answers do (1 to 9, in the pack's order,
+// a row of numbered chips in each value's colour over the Accept): a key or
+// its chip gives the value to the scans set apart and still without one, or
+// to the scan in focus, and the proposed value's key puts a scan back with
+// the rest, so one Accept writes the accepted and the changed, and the ones
+// set apart with no value stay proposals. UX round 6, item 5: a
+// second, quieter button under the grid takes the whole band for the value
+// chosen (every scan the band holds, not the page), after the commit's
+// confirm, as a job the said line follows: how many are accepted, then the
+// re-sort, and the page is read again once the decisions are written. Only
+// where the engine has the band door and the band holds more than the page.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { valueTone, chosenTone } from "../campaigns/values";
 import { ScanViewer } from "../data/ScanViewer";
@@ -17,26 +34,45 @@ import type { Scan } from "../data/scans";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { useFollowedJob } from "./resort";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { jobOver, useFollowedJob } from "./resort";
 import {
   acceptBody,
   acceptWords,
   acceptedFollowLine,
   acceptedWords,
   type Accepted,
+  listedOf,
+  bandAcceptWords,
+  bandBody,
+  bandConfirmWords,
+  bandFollowLine,
+  bandOffered,
+  bandResultOf,
+  bandServed,
+  type BandSent,
   bandWords,
+  chooseKey,
+  chooseValue,
+  closeList,
+  correctedWords,
+  corrects,
   defaultFilter,
   filterOf,
   grid,
   gridHref,
   gridOf,
   keyAct,
+  keyedValues,
+  keyedWords,
   mayAccept,
   moved,
+  openList,
+  paletteOf,
   rangeApart,
   refusedWords,
   SIZES,
-  slots,
+  spaceApart,
   stateLine,
   tally,
   tileTitle,
@@ -95,7 +131,16 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   // the last accept and the page it was made on: the said line follows the re-sort job it queued, as the commit's does
   const [accepted, setAccepted] = useState<{ a: Accepted; was: GridState } | null>(null);
   const job = useFollowedJob(accepted?.a.resort?.job ?? null);
-  const line = accepted && job ? acceptedFollowLine(accepted.a, accepted.was, job) : said;
+  // the whole band accepted as a job (item 5): the line follows that job, then the re-sort its result names, and the
+  // page is read again once the job is over (the decisions are written; the band is empty, or holds what a person
+  // decided meanwhile)
+  const [band, setBand] = useState<BandSent | null>(null);
+  const [asking, setAsking] = useState(false);
+  const latest = useRef<Filter>(given);
+  const bandJob = useFollowedJob(band?.queued.job ?? null, () => void read(latest.current));
+  const resortJob = useFollowedJob(bandJob?.state === "done" ? (bandResultOf(bandJob.result).resort?.job ?? null) : null);
+  const line = band ? bandFollowLine(band, bandJob, resortJob) : accepted && job ? acceptedFollowLine(accepted.a, accepted.was, job) : said;
+  const following = band !== null && !(bandJob !== null && jobOver(bandJob.state));
   const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
   const [since, setSince] = useState(Date.now());
@@ -105,12 +150,14 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   const seq = useRef(0);
   const gridEl = useRef<HTMLDivElement | null>(null);
   const accepting = mayAccept(caps);
+  const banding = bandServed(caps);
   // the first read opens the filter: the value with the most scans, the band below the threshold
   const opened = useRef(false);
 
   const read = useCallback(
     (f: Filter) => {
       const mine = ++seq.current;
+      latest.current = f;
       setSince(Date.now());
       setReading(true);
       return grid.scans(model, axis, f).then(
@@ -135,6 +182,8 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     setState(null);
     setSaid(null);
     setAccepted(null);
+    setBand(null);
+    setAsking(false);
     // one small read for the counts, then the page under the filter they open
     grid.scans(model, axis, given, 1, 1).then(
       (p) => {
@@ -168,6 +217,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     grid
       .accept(body)
       .then((a) => {
+        setBand(null);
         setSaid(acceptedWords(a, was));
         setAccepted(a.resort?.job ? { a, was } : null);
         // the next page: the scans accepted left the set, so the first page is the next
@@ -175,6 +225,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       })
       .catch((e: unknown) => {
         const r = refusedWords(e);
+        setBand(null);
         setSaid(r.words);
         setAccepted(null);
         if (r.stale) void read(filter);
@@ -182,13 +233,22 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       .finally(() => setBusy(false));
   }, [state, busy, accepting, filter, read]);
 
-  // the keys, on the window while the page is open; a field or the full view keeps its own
-  const keyed = useRef({ state, apply, full });
-  keyed.current = { state, apply, full };
+  /** The second button: the confirm opens for the whole band. */
+  const askBand = useCallback(() => {
+    if (!state || busy || following) return;
+    if (!banding) return setSaid("Accepting needs work on the Review page.");
+    if (!bandBody(state, filter)) return setSaid("Choose a value first.");
+    setAsking(true);
+  }, [state, busy, following, banding, filter]);
+  const bandAsked = asking && state ? bandBody(state, filter) : null;
+
+  // the keys, on the window while the page is open; a field, the full view or the band's confirm keeps its own
+  const keyed = useRef({ state, apply, full, asking });
+  keyed.current = { state, apply, full, asking };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
-      if (!k.state || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!k.state || k.asking || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (t?.closest?.("dialog")) return;
@@ -205,7 +265,11 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       e.preventDefault();
       switch (act.kind) {
         case "apart":
-          return setState((s) => (s && s.focus !== null ? toggleApart(s, s.focus) : s));
+          return setState((s) => (s && s.focus !== null ? spaceApart(s, s.focus) : s));
+        case "key":
+          return setState((s) => (s ? chooseKey(s, act.key) : s));
+        case "list":
+          return setState((s) => (s ? openList(s) : s));
         case "apply":
           return k.apply();
         case "move":
@@ -213,6 +277,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
         case "full":
           return setFull(true);
         case "back":
+          if (k.state.listing !== null) return setState((s) => (s ? closeList(s) : s));
           location.hash = href("review");
           return;
       }
@@ -228,23 +293,55 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   }, [state?.focus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <GridBody
-      state={state}
-      axis={axis}
-      filter={filter}
-      failed={failed}
-      said={line}
-      reading={reading}
-      busy={busy}
-      full={full}
-      since={since}
-      accepting={accepting}
-      grid={gridEl}
-      onState={setState}
-      onFilter={narrow}
-      onApply={apply}
-      onFull={setFull}
-    />
+    <>
+      <GridBody
+        state={state}
+        axis={axis}
+        filter={filter}
+        failed={failed}
+        said={line}
+        reading={reading}
+        busy={busy}
+        following={following}
+        full={full}
+        since={since}
+        accepting={accepting}
+        banding={banding}
+        grid={gridEl}
+        onState={setState}
+        onFilter={narrow}
+        onApply={apply}
+        onBand={askBand}
+        onFull={setFull}
+      />
+      {bandAsked && state && (
+        <ConfirmDialog
+          title="Accept them all"
+          words={bandConfirmWords(state, filter)}
+          button={`Accept all ${n(bandAsked.count)}`}
+          busyWords="Accepting…"
+          go={() => grid.acceptBand(bandAsked)}
+          onClose={() => setAsking(false)}
+          onDone={(queued) => {
+            setAsking(false);
+            setAccepted(null);
+            setSaid(null);
+            setBand({ body: bandAsked, queued, was: state });
+          }}
+          onRefused={(e) => {
+            // the registry moved (a decision, a campaign, another run): the page is read again, as the page accept's stale case
+            const r = refusedWords(e);
+            if (!r.stale) return r.words;
+            setAsking(false);
+            setBand(null);
+            setAccepted(null);
+            setSaid(r.words);
+            void read(filter);
+            return null;
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -256,13 +353,18 @@ export interface GridBodyProps {
   said: string | null;
   reading: boolean;
   busy: boolean;
+  /** A band accept's job under way: the band button waits for it. */
+  following?: boolean;
   full: boolean;
   since?: number;
   accepting: boolean;
+  /** The engine takes a whole band in one move and the person may accept. */
+  banding?: boolean;
   grid?: React.RefObject<HTMLDivElement | null>;
   onState: (f: (s: GridState | null) => GridState | null) => void;
   onFilter: (f: Filter) => void;
   onApply: () => void;
+  onBand?: () => void;
   onFull: (open: boolean) => void;
 }
 
@@ -270,12 +372,13 @@ export interface GridBodyProps {
 export function GridBody(p: GridBodyProps) {
   const s = p.state;
   const page = s?.page ?? null;
-  const palette = useMemo(() => (page ? slots(page.values, [page.value ?? ""].filter(Boolean)) : []), [page]);
+  const palette = useMemo(() => (s ? paletteOf(s) : []), [s?.page, s?.corrections]); // eslint-disable-line react-hooks/exhaustive-deps
   const t = s ? tally(s) : null;
   const focusAt = s && page ? Math.max(0, page.scans.findIndex((x) => x.stack === s.focus)) : 0;
   const set = (f: (s: GridState) => GridState) => p.onState((x) => (x ? f(x) : x));
   const value = page?.value ?? p.filter.value;
   const empty = page !== null && page.total === 0;
+  const keyed = s ? keyedValues(s) : [];
   return (
     <section className="qgrid-page pgrid-page" aria-label="proposals">
       <div className="qgrid-head">
@@ -350,7 +453,7 @@ export function GridBody(p: GridBodyProps) {
         <div className={p.reading ? "pgrid-wrap reading" : "pgrid-wrap"}>
           <div className="pgrid" ref={p.grid} data-pgrid="" aria-busy={p.reading || undefined}>
             {page.scans.map((x) => (
-              <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} />
+              <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} onCorner={() => set((y) => openList(y, x.stack))} onState={set} />
             ))}
           </div>
           {p.reading && (
@@ -362,12 +465,65 @@ export function GridBody(p: GridBodyProps) {
       )}
       {s && page && !empty && (
         <div className="pg-foot" role="toolbar" aria-label="accept">
+          {keyed.length > 0 && (
+            <span className="pg-kinds" role="group" aria-label={`A value for ${keyedWords(s)}`}>
+              <span className="meta pg-kinds-for">{keyedWords(s)}</span>
+              {keyed.map((v, i) => {
+                const on = v === value;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    className={on ? "opt q-chip on" : "opt q-chip"}
+                    title={on ? `${v}, as the model proposed: back with the rest` : `${v} for ${keyedWords(s)}`}
+                    {...valueTone(palette, v)}
+                    onClick={(e) => {
+                      set((y) => chooseKey(y, i + 1));
+                      e.currentTarget.blur();
+                    }}
+                  >
+                    <kbd>{i + 1}</kbd>
+                    {v}
+                  </button>
+                );
+              })}
+              {page.legal.length > keyed.length && (
+                <button
+                  type="button"
+                  className={s.listing !== null ? "opt q-other on" : "opt q-other"}
+                  aria-expanded={s.listing !== null}
+                  title={`another value for ${keyedWords(s)}`}
+                  onClick={(e) => {
+                    set((y) => openList(y));
+                    e.currentTarget.blur();
+                  }}
+                >
+                  <kbd>0</kbd>
+                  other…
+                </button>
+              )}
+            </span>
+          )}
           <button type="button" className="button" disabled={p.busy || !p.accepting || !value || (t?.accept ?? 0) === 0} onClick={p.onApply}>
             {acceptWords(s, p.filter)} <kbd>Enter</kbd>
           </button>
+          {p.banding && bandOffered(s, p.filter) && (
+            <button type="button" className="button secondary pg-band-accept" disabled={p.busy || p.following} onClick={p.onBand}>
+              {bandAcceptWords(s, p.filter)}
+            </button>
+          )}
           {t && (
             <span className="q-tally" role="status" aria-live="polite">
-              {t.apart > 0 ? <><b>{n(t.apart)}</b> set apart</> : <span className="meta">click a wrong one to set it apart</span>}
+              {t.corrected > 0 || t.apart > 0 ? (
+                [t.corrected > 0 ? <><b>{n(t.corrected)}</b> corrected ({correctedWords(s)})</> : null, t.apart > 0 ? <><b>{n(t.apart)}</b> set apart</> : null].filter(Boolean).map((part, i) => (
+                  <span key={i}>
+                    {i > 0 ? " · " : ""}
+                    {part}
+                  </span>
+                ))
+              ) : (
+                <span className="meta">click a wrong one to set it apart{keyed.length > 0 ? `, ${keyed.length > 1 ? `1 to ${keyed.length}` : "1"} gives it its value` : ""}</span>
+              )}
               {t.decided > 0 ? <> · <b>{n(t.decided)}</b> decided by a person, kept</> : null}
             </span>
           )}
@@ -379,6 +535,17 @@ export function GridBody(p: GridBodyProps) {
             <span>
               <kbd>shift</kbd>click a range
             </span>
+            {keyed.length > 0 && (
+              <span>
+                <kbd>1</kbd>
+                {keyed.length > 1 ? (
+                  <>
+                    …<kbd>{keyed.length}</kbd>
+                  </>
+                ) : null}
+                its value
+              </span>
+            )}
             <span>
               <kbd>f</kbd>full size
             </span>
@@ -453,16 +620,79 @@ export function Histogram({ bands, range, min, max, onChange }: { bands: Band[];
   );
 }
 
-function Tile({ scan: x, state: s, palette, onClick }: { scan: GScan; state: GridState; palette: string[]; onClick: (shift: boolean) => void }) {
+/**
+ * A scan's tile: its picture framed in the proposed value's colour; set apart, the caution frame and the word
+ * `apart` in its corner; corrected, the person's value's colour and that word. The corner opens the value list
+ * where the engine offers one.
+ */
+function Tile({ scan: x, state: s, palette, onClick, onCorner, onState }: { scan: GScan; state: GridState; palette: string[]; onClick: (shift: boolean) => void; onCorner: () => void; onState: (f: (s: GridState) => GridState) => void }) {
   const apart = x.stack in s.apart;
+  const correction = s.corrections[x.stack] ?? null;
   const focused = s.focus === x.stack;
-  const cls = ["pg-tile", focused ? "focused" : "", apart ? "apart" : "", x.decided ? "decided" : ""].filter(Boolean).join(" ");
+  const listing = s.listing === x.stack || (s.listing === "apart" && apart && focused);
+  const cls = ["pg-tile", focused ? "focused" : "", apart && !correction ? "apart" : "", correction ? "corrected" : "", x.decided ? "decided" : "", listing ? "listing" : ""].filter(Boolean).join(" ");
+  const corner = correction ?? (apart ? "apart" : null);
+  const label = `scan ${x.stack}: ${x.proposed} ${x.probability.toFixed(2)}${correction ? `, corrected to ${correction}` : apart ? ", set apart" : ""}${x.decided ? ", decided by a person" : ""}`;
   return (
-    <div className={cls} data-stack={x.stack} {...valueTone(palette, x.proposed)} aria-label={`scan ${x.stack}: ${x.proposed} ${x.probability.toFixed(2)}${apart ? ", set apart" : ""}${x.decided ? ", decided by a person" : ""}`} aria-current={focused ? "true" : undefined} title={tileTitle(x)} onClick={(e) => onClick(e.shiftKey)}>
+    <div className={cls} data-stack={x.stack} {...valueTone(palette, correction ?? x.proposed)} aria-label={label} aria-current={focused ? "true" : undefined} title={tileTitle(x, correction)} onClick={(e) => onClick(e.shiftKey)}>
       {x.picture ? <img src={x.picture} alt="" decoding="async" draggable={false} /> : <span className="q-blank">no picture</span>}
       <span className="pg-p">{x.probability.toFixed(2)}</span>
-      {apart && <span className="pg-mark">apart</span>}
+      {corner &&
+        (corrects(s) ? (
+          <button
+            type="button"
+            className={correction ? "pg-mark pg-corner pg-value" : "pg-mark pg-corner"}
+            {...(correction ? valueTone(palette, correction) : {})}
+            aria-expanded={listing}
+            title={correction ? "another value" : "its value"}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.currentTarget.blur();
+              onCorner();
+            }}
+          >
+            {corner}
+          </button>
+        ) : (
+          <span className="pg-mark">{corner}</span>
+        ))}
       {x.decided && !apart && <span className="pg-mark pg-decided">decided</span>}
+      {listing && <ValueList state={s} palette={palette} onState={onState} />}
+    </div>
+  );
+}
+
+/** The axis's whole value list over a tile, open once for that scan or for the scans set apart; the pick closes it. */
+function ValueList({ state: s, palette, onState }: { state: GridState; palette: string[]; onState: (f: (s: GridState) => GridState) => void }) {
+  const forApart = s.listing === "apart";
+  const stack = typeof s.listing === "number" ? s.listing : s.focus;
+  const have = forApart ? null : stack !== null ? s.corrections[stack] ?? null : null;
+  const count = forApart ? listedOf(s).length : 1;
+  const who = forApart ? `the ${n(count)} set apart` : `scan ${stack}`;
+  // the list opens to the right of the tile's corner; at the grid's right edge it opens to the left instead
+  const el = useRef<HTMLDivElement | null>(null);
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    const pop = el.current;
+    const host = pop?.closest<HTMLElement>(".pgrid");
+    if (!pop || !host) return;
+    const r = pop.getBoundingClientRect();
+    const h = host.getBoundingClientRect();
+    if (r.width > 0 && r.right > h.right) setFlip(true);
+  }, []);
+  return (
+    <div ref={el} className={flip ? "q-pop flip" : "q-pop"} role="group" aria-label={`a value for ${who}`} onClick={(e) => e.stopPropagation()}>
+      <span className="meta q-pop-for">
+        {who} · {axisTitle(s.page.axis).toLowerCase()}
+      </span>
+      {s.page.legal.map((v) => {
+        const on = have === v;
+        return (
+          <button key={v} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} {...chosenTone(palette, v, on)} onClick={() => onState((x) => chooseValue(x, v))}>
+            {v}
+          </button>
+        );
+      })}
     </div>
   );
 }

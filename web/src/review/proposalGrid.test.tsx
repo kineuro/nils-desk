@@ -3,10 +3,17 @@
 // The batch accept grid (UX round 5): the doors' answers read into one shape;
 // the filter an address names and the one a page opens with; the grid's
 // state (a click sets apart, shift-click a range, the keys move and set apart,
-// Enter accepts); the accept body (every scan seen, the set-apart ones as
-// exceptions); the words; and the page itself against a fake engine, reading
-// its counts, narrowing, accepting a page and loading the next; the Review
-// link on the cards.
+// Enter accepts; 0 opens the value list and a pick corrects a set-apart scan,
+// UX round 6 item 4); the accept body (every scan seen, the set-apart ones as
+// exceptions, the corrected ones with the person's value and not in except);
+// the words; and the page itself against a fake engine, reading its counts,
+// narrowing, correcting a tile, accepting a page and loading the next, and an
+// older engine without the axis's values offering no correction; the Review
+// link on the cards. UX round 6, item 5: the band door's body from a page
+// with set-apart and corrected tiles, its reply and the job's result read
+// tolerantly, the second button's words, its confirm, the said line and the
+// follow over the job then the re-sort, and the button absent without the
+// door, without a value, or when the band fits one page.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,33 +31,60 @@ import {
   acceptedOf,
   acceptedFollowLine,
   acceptedWords,
+  acceptingLine,
+  bandAcceptWords,
+  bandBody,
+  bandConfirmWords,
+  bandFollowLine,
+  bandOffered,
+  bandQueuedOf,
+  bandResultOf,
+  bandSaidLine,
+  bandServed,
+  type BandSent,
   bandWords,
+  chooseKey,
+  chooseValue,
+  closeList,
+  correctedWords,
+  corrects,
   defaultFilter,
   filterOf,
   GRID_DOORS,
   gridHref,
   gridOf,
   gridServed,
+  KEYED,
   keyAct,
+  keyedScans,
+  keyedValues,
+  keyedWords,
   mayAccept,
   moved,
+  openList,
+  listedOf,
   pageOf,
+  paletteOf,
   rangeApart,
   refusedWords,
+  setCorrection,
   slots,
+  spaceApart,
   stateLine,
   tally,
   tileTitle,
   toggleApart,
 } from "./proposalGrid";
-import { accepted, gpage, MODEL } from "./proposalGrid.fixture";
+import { accepted, type AcceptSent, bandJob, bandQueued, type BandSentBody, bandWrites, gpage, LEGAL, MODEL } from "./proposalGrid.fixture";
 import { WorkBody } from "./WorkPage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const DOORS = [GRID_DOORS.scans, GRID_DOORS.accept, "GET /api/review", "GET /api/review/summary", "GET /api/review/proposals", "POST /api/decisions/commit", "POST /api/review/proposals/campaign", "GET /api/campaigns"];
+const DOORS = [GRID_DOORS.scans, GRID_DOORS.accept, GRID_DOORS.band, "GET /api/review", "GET /api/review/summary", "GET /api/review/proposals", "POST /api/decisions/commit", "POST /api/review/proposals/campaign", "GET /api/campaigns"];
 const caps = capsWith(DOORS, [...GRANTS] as Grant[]);
 const reader = capsWith(DOORS, ["review:see"] as Grant[]);
+// an engine before the band door
+const noBand = capsWith(DOORS.filter((d) => d !== GRID_DOORS.band), [...GRANTS] as Grant[]);
 
 const page = pageOf(gpage({ value: "neck", max: 0.9, size: 10, total: 41212 }));
 
@@ -64,6 +98,7 @@ describe("the doors' answers, read into one shape", () => {
     expect(page.threshold).toBe(0.9);
     expect(page.range).toEqual({ low: 0.3, high: 0.89 });
     expect(page.values.map((v) => v.value)).toEqual(["neck", "spine", "brain"]);
+    expect(page.legal).toEqual(LEGAL);
     expect(page.bands).toHaveLength(10);
     expect(page.bands.reduce((s, b) => s + b.count, 0)).toBe(41212);
     expect(page.total).toBe(41212);
@@ -78,12 +113,26 @@ describe("the doors' answers, read into one shape", () => {
     expect(bare.total).toBe(1);
     expect(bare.range).toBeNull();
     expect(bare.label).toBe("0");
+    expect(bare.legal).toEqual([]);
+    expect(pageOf(gpage({ legal: null })).legal).toEqual([]);
   });
 
   it("reads what the accept did", () => {
     const a = acceptedOf(accepted({ seen: [1000, 1001, 1002], except: [1002], value: "neck" }));
-    expect(a).toMatchObject({ value: "neck", decided: 1, keptDecided: 1, setApart: 1, closed: [903], leftInItems: 12, resort: { job: 356, state: "queued", stacks: 1 } });
+    expect(a).toMatchObject({ value: "neck", decided: 1, corrected: 0, keptDecided: 1, setApart: 1, closed: [903], leftInItems: 12, resort: { job: 356, state: "queued", stacks: 1 } });
     expect(acceptedOf({}).resort).toBeNull();
+    expect(acceptedOf({}).corrected).toBe(0);
+    expect(acceptedOf(accepted({ seen: [1001, 1002, 1003], except: [1003], value: "neck", corrections: [{ stack: 1002, value: "brain" }] }))).toMatchObject({ decided: 1, corrected: 1, setApart: 1, resort: { stacks: 2 } });
+  });
+
+  it("reads what the band door answered and what its job did, whatever was left out", () => {
+    expect(bandQueuedOf({ job: 357, stacks: 41211, words: "queued" })).toEqual({ job: 357, stacks: 41211, words: "queued" });
+    expect(bandQueuedOf({})).toEqual({ job: null, stacks: 0, words: null });
+    const r = bandResultOf({ decided: 41208, corrected: 2, kept_decided: 1, left_out_sealed: 4, excepted: 1, closed: 3, resort: { job: 358, state: "queued", stacks: 41210 } });
+    expect(r).toEqual({ decided: 41208, corrected: 2, keptDecided: 1, leftOutSealed: 4, excepted: 1, closed: 3, resort: { job: 358, state: "queued", stacks: 41210 } });
+    expect(bandResultOf(null)).toEqual({ decided: 0, corrected: 0, keptDecided: 0, leftOutSealed: 0, excepted: 0, closed: 0, resort: null });
+    expect(bandResultOf({ decided: 5, closed: [1, 2] }).closed).toBe(2);
+    expect(bandResultOf({ resort: { job: null, state: "done" } }).resort).toEqual({ job: null, state: "done", stacks: 0 });
   });
 
   it("knows the doors and the grants", () => {
@@ -91,6 +140,9 @@ describe("the doors' answers, read into one shape", () => {
     expect(mayAccept(caps)).toBe(true);
     expect(mayAccept(reader)).toBe(false);
     expect(gridServed(capsWith([], [...GRANTS] as Grant[]))).toBe(false);
+    expect(bandServed(caps)).toBe(true);
+    expect(bandServed(reader)).toBe(false);
+    expect(bandServed(noBand)).toBe(false);
   });
 });
 
@@ -117,7 +169,7 @@ describe("the grid's state", () => {
   it("sets a scan apart on a click, a range on a shift-click, and counts what Accept writes", () => {
     let s = gridOf(page);
     expect(s.focus).toBe(1000);
-    expect(tally(s)).toEqual({ accept: 9, apart: 0, decided: 1, total: 10 });
+    expect(tally(s)).toEqual({ accept: 9, corrected: 0, apart: 0, decided: 1, total: 10 });
     s = toggleApart(s, 1003);
     expect(s.apart).toEqual({ 1003: true });
     expect(s.focus).toBe(1003);
@@ -125,7 +177,7 @@ describe("the grid's state", () => {
     s = rangeApart(s, 1006);
     expect(Object.keys(s.apart).map(Number)).toEqual([1003, 1004, 1005, 1006]);
     expect(s.focus).toBe(1006);
-    expect(tally(s)).toEqual({ accept: 5, apart: 4, decided: 1, total: 10 });
+    expect(tally(s)).toEqual({ accept: 5, corrected: 0, apart: 4, decided: 1, total: 10 });
     // a click again puts one back
     s = toggleApart(s, 1004);
     expect(1004 in s.apart).toBe(false);
@@ -139,8 +191,112 @@ describe("the grid's state", () => {
     expect(rangeApart(s, 77)).toBe(s);
   });
 
+  it("gives a set-apart scan the person's value: 0 opens the list once, the pick marks the tile, a click takes it back", () => {
+    let s = gridOf(page);
+    expect(corrects(s)).toBe(true);
+    // 0 on a scan not set apart sets it apart and opens the list for it, in one move
+    s = openList(moved(s, 3));
+    expect(s.listing).toBe(1003);
+    expect(s.apart).toEqual({ 1003: true });
+    expect(s.focus).toBe(1003);
+    // again closes it; the scan stays set apart
+    expect(openList(s).listing).toBeNull();
+    expect(openList(s).apart).toEqual({ 1003: true });
+    expect(closeList(s).listing).toBeNull();
+    // the pick gives the scan the value, frames it so, and closes the list
+    s = chooseValue(s, "brain");
+    expect(s.listing).toBeNull();
+    expect(s.corrections).toEqual({ 1003: "brain" });
+    expect(1003 in s.apart).toBe(true);
+    expect(tally(s)).toEqual({ accept: 8, corrected: 1, apart: 0, decided: 1, total: 10 });
+    // a value the axis does not take, or a scan not on the page, changes nothing
+    expect(setCorrection(s, 1004, "liver")).toBe(s);
+    expect(setCorrection(s, 77, "brain")).toBe(s);
+    expect(chooseValue(s, "chest")).toBe(s);
+    // with several set apart and the focus on one, 0 opens the list for all of them, and the pick gives each the value
+    s = rangeApart(s, 1006);
+    expect(s.listing).toBeNull();
+    s = openList(s);
+    expect(s.listing).toBe("apart");
+    // the list is for the ones still without a value (and the focus): the scan corrected to brain already is not swept along
+    expect(listedOf(s)).toEqual([1004, 1005, 1006]);
+    // the value the model proposed is no correction: the listed scans go back with the rest
+    const back = chooseValue(s, "neck");
+    expect(back.corrections).toEqual({ 1003: "brain" });
+    expect(back.apart).toEqual({ 1003: true });
+    expect(tally(back)).toMatchObject({ accept: 8, corrected: 1, apart: 0 });
+    s = chooseValue(s, "chest");
+    expect(s.corrections).toEqual({ 1003: "brain", 1004: "chest", 1005: "chest", 1006: "chest" });
+    expect(tally(s)).toMatchObject({ accept: 5, corrected: 4, apart: 0 });
+    // the corner of a scan not in focus opens the list for that scan alone
+    expect(openList(s, 1008)).toMatchObject({ listing: 1008, focus: 1008, apart: { 1003: true, 1004: true, 1005: true, 1006: true, 1008: true } });
+    // a click on a corrected scan takes it back to the model's proposal; space leaves it set apart with no value
+    const clicked = toggleApart(s, 1004);
+    expect(1004 in clicked.corrections).toBe(false);
+    expect(1004 in clicked.apart).toBe(false);
+    const spaced = spaceApart(s, 1005);
+    expect(1005 in spaced.corrections).toBe(false);
+    expect(1005 in spaced.apart).toBe(true);
+    expect(tally(spaced)).toMatchObject({ corrected: 3, apart: 1 });
+    expect(spaceApart(spaced, 1005).apart).not.toHaveProperty("1005");
+    // the colours: the page's values by name, the filter's, the values corrected to, then the axis's other values
+    expect(paletteOf(s)).toEqual(["brain", "neck", "spine", "chest", "brain-neck"]);
+    expect(paletteOf(gridOf(page))).toEqual(["brain", "neck", "spine", "brain-neck", "chest"]);
+  });
+
+  it("puts the axis's values on the number keys: a key names the scans set apart and still without a value, or the scan in focus; the proposed value's key puts a scan back", () => {
+    let s = gridOf(page);
+    // the pack's order, so a key keeps its value on every page
+    expect(keyedValues(s)).toEqual(LEGAL);
+    expect(keyAct("3")).toEqual({ kind: "key", key: 3 });
+    // nothing set apart: the key names the scan in focus alone, and sets it apart with its value in one move
+    s = moved(s, 2);
+    expect(keyedScans(s)).toEqual([1002]);
+    expect(keyedWords(s)).toBe("scan in focus");
+    s = chooseKey(s, 1);
+    expect(s.corrections).toEqual({ 1002: "brain" });
+    expect(s.apart).toEqual({ 1002: true });
+    // several clicked apart: one key gives them all the value; the scan that has its value already is left alone
+    s = toggleApart(toggleApart(s, 1004), 1006);
+    expect(keyedScans(s)).toEqual([1004, 1006]);
+    expect(keyedWords(s)).toBe("the 2 set apart");
+    s = chooseKey(s, 3);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest", 1006: "chest" });
+    expect(tally(s)).toMatchObject({ accept: 6, corrected: 3, apart: 0 });
+    // again on the focus: its value changes, the others keep theirs
+    s = chooseKey(s, 5);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest", 1006: "spine" });
+    // the key of the value the model proposed: the scan goes back with the rest, no correction and not set apart
+    s = chooseKey(s, 4);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest" });
+    expect(1006 in s.apart).toBe(false);
+    expect(tally(s)).toMatchObject({ accept: 7, corrected: 2, apart: 0 });
+    // on a scan as proposed, that key changes nothing; a key past the axis's values neither; an open list closes on a key
+    expect(chooseKey(s, 4)).toEqual(s);
+    expect(chooseKey(s, 6)).toBe(s);
+    expect(chooseKey(openList(moved(s, 1)), 2)).toMatchObject({ listing: null, corrections: { 1007: "brain-neck" } });
+    // the body: the corrected with their values, nothing in except
+    expect(acceptBody(s, { value: "neck", min: null, max: null, size: 10 })).toMatchObject({ except: [], corrections: [{ stack: 1002, value: "brain" }, { stack: 1004, value: "chest" }] });
+    // a longer axis keeps its first nine on the keys, the rest in the list
+    const long = gridOf(pageOf(gpage({ value: "neck", size: 10, legal: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "neck"] })));
+    expect(keyedValues(long)).toHaveLength(KEYED);
+    // an engine that says no values: no keys
+    const old = gridOf(pageOf(gpage({ value: "neck", size: 10, legal: null })));
+    expect(keyedValues(old)).toEqual([]);
+    expect(chooseKey(old, 1)).toBe(old);
+  });
+
+  it("offers no correction on an engine that says no values", () => {
+    const old = gridOf(pageOf(gpage({ value: "neck", size: 10, legal: null })));
+    expect(corrects(old)).toBe(false);
+    const s = toggleApart(old, 1003);
+    expect(openList(s)).toBe(s);
+    expect(setCorrection(s, 1003, "brain")).toBe(s);
+    expect(acceptBody(s, { value: "neck", min: null, max: null, size: 10 })).not.toHaveProperty("corrections");
+  });
+
   it("maps the keys and moves the focus within the page", () => {
-    expect([" ", "Enter", "f", "Escape", "x", "1"].map((k) => keyAct(k).kind)).toEqual(["apart", "apply", "full", "back", "none", "none"]);
+    expect([" ", "Enter", "f", "Escape", "x", "1", "9", "0"].map((k) => keyAct(k).kind)).toEqual(["apart", "apply", "full", "back", "none", "key", "key", "list"]);
     expect(keyAct("ArrowDown", 12)).toEqual({ kind: "move", by: 12 });
     expect(keyAct("ArrowUp", 12)).toEqual({ kind: "move", by: -12 });
     expect(keyAct("ArrowLeft")).toEqual({ kind: "move", by: -1 });
@@ -154,10 +310,33 @@ describe("the grid's state", () => {
     const f = { value: "neck", min: 0.6, max: 0.9, size: 10 };
     const s = rangeApart(toggleApart(gridOf(page), 1001), 1002);
     expect(acceptBody(s, f)).toEqual({ model: "12", axis: "body_part", value: "neck", min: 0.6, max: 0.9, seen: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009], except: [1001, 1002] });
+    // a corrected scan goes with the person's value, and not among the exceptions
+    const c = setCorrection(setCorrection(s, 1002, "brain"), 1005, "chest");
+    expect(acceptBody(c, f)).toMatchObject({ except: [1001], corrections: [{ stack: 1002, value: "brain" }, { stack: 1005, value: "chest" }] });
+    expect(acceptBody(c, f)!.seen).toHaveLength(10);
     // an open edge is left out; no value, no body
     expect(acceptBody(gridOf(page), { value: "neck", min: null, max: null, size: 10 })).not.toHaveProperty("min");
     expect(acceptBody(gridOf(pageOf(gpage({ value: null, size: 3 }))), { value: null, min: null, max: null, size: 3 })).toBeNull();
     expect(acceptBody(gridOf(pageOf(gpage({ value: "neck", size: 3, total: 0 }))), f)).toBeNull();
+  });
+
+  it("sends the whole band as its count, with the page's set-apart and corrected scans, and offers it only past one page", () => {
+    const f = { value: "neck", min: 0.6, max: 0.9, size: 10 };
+    const s = setCorrection(setCorrection(rangeApart(toggleApart(gridOf(page), 1001), 1003), 1002, "brain"), 1005, "chest");
+    expect(bandOffered(s, f)).toBe(true);
+    expect(bandBody(s, f)).toEqual({ model: "12", axis: "body_part", value: "neck", min: 0.6, max: 0.9, count: 41212, except: [1001, 1003], corrections: [{ stack: 1002, value: "brain" }, { stack: 1005, value: "chest" }] });
+    expect(bandBody(s, f)).not.toHaveProperty("seen");
+    // an open edge is left out; no corrections, none sent
+    const plain = bandBody(gridOf(page), { value: "neck", min: null, max: null, size: 10 })!;
+    expect(plain).toEqual({ model: "12", axis: "body_part", value: "neck", count: 41212, except: [] });
+    // no value, no body and no button; a band that fits one page is the page Accept's
+    const noValue = gridOf(pageOf(gpage({ value: null, size: 3 })));
+    expect(bandBody(noValue, { value: null, min: null, max: null, size: 3 })).toBeNull();
+    expect(bandOffered(noValue, { value: null })).toBe(false);
+    const onePage = gridOf(pageOf(gpage({ value: "neck", size: 10, total: 10 })));
+    expect(bandOffered(onePage, f)).toBe(false);
+    expect(bandOffered(gridOf(pageOf(gpage({ value: "neck", size: 10, total: 11 }))), f)).toBe(true);
+    expect(bandBody(gridOf(pageOf(gpage({ value: "neck", size: 3, total: 0 }))), f)).toBeNull();
   });
 });
 
@@ -174,6 +353,14 @@ describe("the words", () => {
     const a = acceptedOf(accepted({ seen: page.scans.map((x) => x.stack), except: [1003], value: "neck" }));
     expect(acceptedWords(a, s)).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · sorted again as job 356");
     expect(acceptedWords(acceptedOf({ decided: 3, value: "spine", resort: { job: null, state: "done", stacks: 3 } }))).toBe("Accepted 3 as spine in your name · sorted again");
+    // corrected: the button counts them, the line says how many and which values, most first
+    const c = setCorrection(setCorrection(setCorrection(toggleApart(s, 1007), 1004, "brain"), 1005, "chest"), 1006, "brain");
+    expect(correctedWords(c)).toBe("2 brain, 1 chest");
+    expect(acceptWords(c, f)).toBe("Accept 4 as neck · 3 corrected");
+    const ca = acceptedOf(accepted({ seen: page.scans.map((x) => x.stack), except: [1003, 1007], value: "neck", corrections: [{ stack: 1004, value: "brain" }, { stack: 1005, value: "chest" }, { stack: 1006, value: "brain" }] }));
+    expect(acceptedWords(ca, c)).toBe("Accepted 4 as neck and corrected 3 (2 brain, 1 chest) in your name · 2 set apart stay proposals · 1 keeps a person's decision · 1 question closed · sorted again as job 356");
+    expect(acceptedWords(ca)).toBe("Accepted 4 as neck and corrected 3 in your name · 2 set apart stay proposals · 1 keeps a person's decision · 1 question closed · sorted again as job 356");
+    expect(tileTitle(page.scans[3], "brain")).toBe("Ax_T2w_2D_TSE_1003 · now neck · neck 0.90 · your value brain · subject 9f3c03a7e1b2d4");
     // the line follows the job as the commit's does: how far, the job while it runs, then done
     const row = (state: "queued" | "running" | "done", done: number) => ({ state, progress: { done, of: 8, what: "scans" }, error: null, result: null });
     expect(acceptedFollowLine(a, s, row("queued", 0))).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · 0 of 8 sorted again · waiting for a worker (job 356)");
@@ -185,6 +372,40 @@ describe("the words", () => {
     expect(slots(page.values)).toEqual(["brain", "neck", "spine"]);
     expect(slots(page.values, ["other"])).toEqual(["brain", "neck", "spine", "other"]);
   });
+
+  it("say the whole band: the button, the confirm, the said line, and the follow over the job then the re-sort", () => {
+    const f = { value: "neck", min: 0.8, max: null, size: 10 };
+    const whole = { value: "neck", min: null, max: null, size: 10 };
+    expect(bandAcceptWords(gridOf(page), f)).toBe("Accept all 41,212 neck at 0.80 or above");
+    expect(bandAcceptWords(gridOf(page), { ...f, min: 0.6, max: 0.9 })).toBe("Accept all 41,212 neck at 0.60 to 0.90");
+    expect(bandAcceptWords(gridOf(page), whole)).toBe("Accept all 41,212 neck");
+    // the confirm: one paragraph; the two middle sentences only where there are any
+    expect(bandConfirmWords(gridOf(page), f)).toBe("41,212 scans get body part = neck, what the model proposed at 0.80 or above, in your name, without a look at each picture. Every page shows it once they are sorted again.");
+    const s = setCorrection(setCorrection(rangeApart(toggleApart(gridOf(page), 1001), 1005), 1002, "brain"), 1005, "chest");
+    expect(bandConfirmWords(s, whole)).toBe("41,212 scans get body part = neck, what the model proposed, in your name, without a look at each picture. 3 set apart on this page stay proposals; 2 corrected get their value. Every page shows it once they are sorted again.");
+    expect(bandConfirmWords(setCorrection(toggleApart(gridOf(page), 1001), 1002, "brain"), whole)).toContain(" 1 set apart on this page stays a proposal; 1 corrected gets its value. ");
+    expect(bandConfirmWords(toggleApart(gridOf(page), 1001), whole)).toContain("picture. 1 set apart on this page stays a proposal. Every");
+    // the said line, then the job's progress, then what it wrote and the re-sort
+    const body = bandBody(s, f)!;
+    const sent: BandSent = { body, queued: bandQueuedOf(bandQueued(body as unknown as BandSentBody)), was: s };
+    expect(sent.queued.stacks).toBe(41209);
+    expect(bandSaidLine(sent)).toBe("Accepting 41,209 as neck in your name · job 357");
+    expect(bandSaidLine({ ...sent, queued: { job: null, stacks: 0, words: null } })).toBe("Accepting 41,212 as neck in your name");
+    const row = (state: "queued" | "running" | "done" | "failed" | "cancelled", done: number, of: number, result: Json | null = null, error: string | null = null) => ({ state, progress: { done, of, what: "scans" }, error, result });
+    expect(bandFollowLine(sent, null, null)).toBe("Accepting 41,209 as neck in your name · job 357");
+    expect(bandFollowLine(sent, row("queued", 0, 41209), null)).toBe("Accepting 41,209 as neck in your name · 0 of 41,209 accepted · waiting for a worker (job 357)");
+    expect(bandFollowLine(sent, row("running", 12000, 41209), null)).toBe("Accepting 41,209 as neck in your name · 12,000 of 41,209 accepted (job 357)");
+    expect(bandFollowLine(sent, row("failed", 12000, 41209, null, "the database went away"), null)).toBe("Accepting 41,209 as neck in your name · Stopped at 12,000 of 41,209: the database went away; what was written stands");
+    expect(bandFollowLine(sent, row("cancelled", 500, 41209), null)).toBe("Accepting 41,209 as neck in your name · Stopped at 500 of 41,209; what was written stands");
+    expect(acceptingLine({ state: "running", progress: null, error: null, result: null }, 7)).toBe("0 of 7 accepted");
+    const done = bandJob(body as unknown as BandSentBody, 41209) as { state: "done"; progress: Json; error: null; result: Json };
+    expect(bandFollowLine(sent, done, null)).toBe("Accepted 41,206 as neck and corrected 2 (1 brain, 1 chest) in your name · 3 set apart stay proposals · 1 keeps a person's decision · 3 questions closed · 0 of 41,208 sorted again · waiting for a worker (job 358)");
+    expect(bandFollowLine(sent, done, row("running", 20000, 41208))).toBe("Accepted 41,206 as neck and corrected 2 (1 brain, 1 chest) in your name · 3 set apart stay proposals · 1 keeps a person's decision · 3 questions closed · 20,000 of 41,208 sorted again (job 358)");
+    expect(bandFollowLine(sent, done, row("done", 41208, 41208))).toBe("Accepted 41,206 as neck and corrected 2 (1 brain, 1 chest) in your name · 3 set apart stay proposals · 1 keeps a person's decision · 3 questions closed · 41,208 of 41,208 sorted again");
+    // a result that says less still reads: no re-sort named, nothing about it
+    expect(bandFollowLine(sent, { state: "done", progress: null, error: null, result: { decided: 5 } }, null)).toBe("Accepted 5 as neck in your name");
+    expect(bandFollowLine(sent, { state: "done", progress: null, error: null, result: { decided: 5, resort: { state: "done" } } }, null)).toBe("Accepted 5 as neck in your name · sorted again");
+  });
 });
 
 describe("the page", () => {
@@ -192,17 +413,28 @@ describe("the page", () => {
   let host: HTMLElement;
   let calls: { method: string; url: string; body: Json | null }[];
   let holds: (() => void)[];
+  // the axis's legal values the fake engine serves; null for an engine before them
+  let legal: string[] | null | undefined;
+  // what the band door was sent, and how many of its scans the job has written at each read
+  let banded: BandSentBody[];
+  let bandDone: number[];
   const release = () => act(async () => {
     holds.shift()?.();
     await new Promise((r) => setTimeout(r, 0));
   });
   beforeEach(() => {
     holds = [];
+    legal = undefined;
+    banded = [];
+    bandDone = [];
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     calls = [];
     location.hash = "#review/proposals/12/body_part";
+    // jsdom has no modal dialogs: the confirm opens as an open dialog
+    if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
+    if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); };
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       const body = init?.body ? (JSON.parse(String(init.body)) as Json) : null;
@@ -212,12 +444,23 @@ describe("the page", () => {
         const u = new URL(url, "http://desk");
         const q = u.searchParams;
         const value = q.get("value");
-        const doc = gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total: value === "spine" ? 0 : undefined });
+        // spine has nothing; brain fits one page; a band accepted leaves neck one scan, the one a person decided
+        const total = value === "spine" ? 0 : value === "brain" ? 200 : value === "neck" && banded.length > 0 ? 1 : undefined;
+        const doc = gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total, legal });
         // spine and a band answer when the test lets them, so a later read can land before them and the veil can be seen
         if (value === "spine" || q.get("min")) await new Promise<void>((r) => holds.push(r));
         return reply(doc);
       }
-      if (url === "/api/review/proposals/accept") return reply(accepted(body as { seen: number[]; except: number[]; value: string }));
+      if (url === "/api/review/proposals/accept") return reply(accepted(body as unknown as AcceptSent));
+      if (url === "/api/review/proposals/accept-band") {
+        const sent = body as unknown as BandSentBody;
+        if (sent.count !== 41212) return reply({ error: `bodypart-cascade@r7-fast proposes ${sent.value} on 41,212 scans in this band now, not ${sent.count}: read the page again` }, 409);
+        banded.push(sent);
+        return reply(bandQueued(sent));
+      }
+      // the band's job: as far as the test says at each read, done once all are written; the re-sort it queued, over at once
+      if (url === "/api/jobs/357") return reply(bandJob(banded[0], bandDone.shift() ?? bandWrites(banded[0])));
+      if (url === "/api/jobs/358") return reply({ id: 358, kind: "resort", name: "re-sort after astrid accepted a band", state: "done", progress: { done: 41210, of: 41210, what: "scans" }, error: null, result: null });
       // the re-sort job the accept queued, over on its first read
       if (url === "/api/jobs/356") return reply({ id: 356, kind: "resort", name: "re-sort after astrid accepted 244 decision(s)", state: "done", progress: { done: 244, of: 244, what: "scans" }, error: null, result: null });
       return reply({ error: "no such door" }, 404);
@@ -326,6 +569,226 @@ describe("the page", () => {
     await settle();
     expect(host.querySelector(".qgrid-said")?.textContent).toBe("Accepted 244 as neck in your name · 5 set apart stay proposals · 1 keeps a person's decision · 1 question closed · 244 of 244 sorted again");
     expect(host.querySelectorAll(".pg-tile.apart")).toHaveLength(0);
+  });
+
+  it("gives a set-apart tile its value: 0 opens the list over it, a pick frames it and names it, Accept sends the correction and says it", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    expect(host.querySelector(".pg-foot .q-help")?.textContent).toContain("1…5its value");
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("click a wrong one to set it apart, 1 to 5 gives it its value · 1 decided by a person, kept");
+    // a click sets apart; 0 opens the axis's list over that tile, once
+    const tile = host.querySelector('.pg-tile[data-stack="1003"]')!;
+    await click(tile);
+    expect(tile.querySelector(".pg-mark")?.textContent).toBe("apart");
+    await press("0");
+    const pop = tile.querySelector(".q-pop")!;
+    expect(pop).not.toBeNull();
+    expect(host.querySelectorAll(".q-pop")).toHaveLength(1);
+    expect(pop.querySelector(".q-pop-for")?.textContent).toBe("scan 1003 · body part");
+    expect([...pop.querySelectorAll(".opt")].map((b) => b.textContent)).toEqual(LEGAL);
+    // Escape closes it without a value; the corner opens it again
+    await press("Escape");
+    expect(tile.querySelector(".q-pop")).toBeNull();
+    expect(location.hash).toBe("#review/proposals/12/body_part");
+    await click(tile.querySelector(".pg-corner")!);
+    expect(tile.querySelector(".q-pop")).not.toBeNull();
+    // the pick: the tile takes the value's frame and word, the button and the tally count it
+    await click([...tile.querySelectorAll(".q-pop .opt")].find((b) => b.textContent === "brain")!);
+    expect(tile.querySelector(".q-pop")).toBeNull();
+    expect(tile.className).toContain("corrected");
+    expect(tile.className).not.toContain("apart");
+    expect(tile.querySelector(".pg-mark")?.textContent).toBe("brain");
+    // brain's slot (the page's values by name: brain 1, neck 2), no longer neck's
+    expect(tile.getAttribute("data-slot")).toBe("1");
+    expect(host.querySelector('.pg-tile[data-stack="1002"]')?.getAttribute("data-slot")).toBe("2");
+    expect(tile.getAttribute("aria-label")).toContain("corrected to brain");
+    expect(host.querySelector(".pg-foot .button")?.textContent).toBe("Accept 248 as neck · 1 corrected Enter");
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("1 corrected (1 brain) · 1 decided by a person, kept");
+    // 0 on a tile not set apart sets it apart and opens the list in one move; a tile set apart with no value stays one
+    await press("ArrowRight");
+    await press("ArrowRight");
+    await press("0");
+    expect(host.querySelector('.pg-tile[data-stack="1005"] .q-pop')).not.toBeNull();
+    await press("Escape");
+    expect(host.querySelector('.pg-tile[data-stack="1005"]')?.className).toContain("apart");
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("1 corrected (1 brain) · 1 set apart · 1 decided by a person, kept");
+    // Enter: the correction goes with the body, out of except; the line says both
+    await press("Enter");
+    await settle();
+    await settle();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.body).toMatchObject({ value: "neck", except: [1005], corrections: [{ stack: 1003, value: "brain" }] });
+    await settle();
+    expect(host.querySelector(".qgrid-said")?.textContent).toMatch(/^Accepted 247 as neck and corrected 1 \(1 brain\) in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · .* sorted again$/u);
+    expect(host.querySelectorAll(".pg-tile.corrected")).toHaveLength(0);
+  });
+
+  it("names the wrong ones by number: the chips over the Accept carry the keys, a key gives the clicked ones their value, the proposed value's puts one back, and one Accept sends them all", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    // the axis's values as numbered chips in the pack's order, the page's value the filled one; no 0 while nine keys hold them all
+    const kinds = host.querySelector(".pg-foot .pg-kinds")!;
+    expect([...kinds.querySelectorAll(".q-chip")].map((b) => b.textContent)).toEqual(LEGAL.map((v, i) => `${i + 1}${v}`));
+    expect([...kinds.querySelectorAll(".q-chip.on")].map((b) => b.textContent)).toEqual(["4neck"]);
+    expect(kinds.querySelector(".q-other")).toBeNull();
+    expect(kinds.querySelector(".pg-kinds-for")?.textContent).toBe("scan in focus");
+    // two clicked apart, then one key: both take the value
+    await click(host.querySelector('.pg-tile[data-stack="1003"]')!);
+    await click(host.querySelector('.pg-tile[data-stack="1005"]')!);
+    expect(kinds.querySelector(".pg-kinds-for")?.textContent).toBe("the 2 set apart");
+    await press("1");
+    expect([...host.querySelectorAll(".pg-tile.corrected")].map((t) => t.getAttribute("data-stack"))).toEqual(["1003", "1005"]);
+    expect(host.querySelector('.pg-tile[data-stack="1005"] .pg-mark')?.textContent).toBe("brain");
+    expect(host.querySelector(".pg-foot .button")?.textContent).toBe("Accept 247 as neck · 2 corrected Enter");
+    // the arrows and a key, no click: the scan in focus takes its value
+    await press("ArrowRight");
+    await press("3");
+    expect(host.querySelector('.pg-tile[data-stack="1006"] .pg-mark')?.textContent).toBe("chest");
+    // a chip does what its key does; the proposed value's puts the scan back with the rest
+    await click([...kinds.querySelectorAll(".q-chip")].find((b) => b.textContent === "5spine")!);
+    expect(host.querySelector('.pg-tile[data-stack="1006"] .pg-mark')?.textContent).toBe("spine");
+    await press("4");
+    expect(host.querySelector('.pg-tile[data-stack="1006"]')?.className).not.toMatch(/corrected|apart/u);
+    // one more set apart with no value: it stays a proposal
+    await click(host.querySelector('.pg-tile[data-stack="1008"]')!);
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("2 corrected (2 brain) · 1 set apart · 1 decided by a person, kept");
+    await press("Enter");
+    await settle();
+    await settle();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.body).toMatchObject({ value: "neck", except: [1008], corrections: [{ stack: 1003, value: "brain" }, { stack: 1005, value: "brain" }] });
+  });
+
+  it("offers no correction on an engine before the axis's values: no 0, no corner button, no corrections sent", async () => {
+    legal = null;
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    expect(host.querySelector(".pg-foot .q-help")?.textContent).not.toContain("its value");
+    expect(host.querySelector(".pg-kinds")).toBeNull();
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("click a wrong one to set it apart · 1 decided by a person, kept");
+    const tile = host.querySelector('.pg-tile[data-stack="1003"]')!;
+    await click(tile);
+    expect(tile.querySelector(".pg-mark")?.textContent).toBe("apart");
+    expect(tile.querySelector("button")).toBeNull();
+    await press("0");
+    expect(host.querySelector(".q-pop")).toBeNull();
+    await press("Enter");
+    await settle();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.body).toMatchObject({ except: [1003] });
+    expect(post.body).not.toHaveProperty("corrections");
+  });
+
+  it("accepts the whole band: the second button, its confirm with this page's exceptions, the said line, the follow over the job then the re-sort, and the page read again", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    const band = host.querySelector<HTMLButtonElement>(".pg-foot .pg-band-accept")!;
+    expect(band.textContent).toBe("Accept all 41,212 neck");
+    expect(band.className).toContain("secondary");
+    expect(band.disabled).toBe(false);
+    // the page's Accept stays first and Enter's; the keys legend gains nothing
+    expect(host.querySelector(".pg-foot .button")?.textContent).toBe("Accept 249 as neck Enter");
+    expect(host.querySelector(".pg-foot .q-help")?.textContent).not.toContain("all");
+    // one corrected, one set apart: the confirm names both and the body carries them
+    await click(host.querySelector('.pg-tile[data-stack="1004"]')!);
+    await click(host.querySelector('.pg-tile[data-stack="1004"] .pg-corner')!);
+    await click([...host.querySelectorAll('.pg-tile[data-stack="1004"] .q-pop .opt')].find((b) => b.textContent === "brain")!);
+    await click(host.querySelector('.pg-tile[data-stack="1003"]')!);
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toContain("1 corrected (1 brain) · 1 set apart");
+    await click(band);
+    const dialog = host.querySelector("dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.querySelector("h2")?.textContent).toBe("Accept them all");
+    expect(dialog.querySelector(".lede")?.textContent).toBe("41,212 scans get body part = neck, what the model proposed, in your name, without a look at each picture. 1 set apart on this page stays a proposal; 1 corrected gets its value. Every page shows it once they are sorted again.");
+    const go = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Accept all 41,212")!;
+    expect(go).toBeDefined();
+    // Enter inside the dialog is not the page's Accept
+    await press("Enter");
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    // Cancel closes it with nothing sent; the button opens it again
+    await click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Cancel")!);
+    expect(host.querySelector("dialog")).toBeNull();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    await click(band);
+    bandDone = [12000];
+    const scansRead = () => calls.filter((c) => c.url.startsWith("/api/review/proposals/scans?")).length;
+    const reads = scansRead();
+    await click([...host.querySelectorAll("dialog button")].find((b) => b.textContent === "Accept all 41,212")!);
+    await settle();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.url).toBe("/api/review/proposals/accept-band");
+    expect(post.body).toEqual({ model: "12", axis: "body_part", value: "neck", count: 41212, except: [1003], corrections: [{ stack: 1004, value: "brain" }] });
+    // the dialog closed on the answer; the line says the job and follows it
+    expect(host.querySelector("dialog")).toBeNull();
+    expect(host.querySelector(".qgrid-said")?.textContent).toMatch(/^Accepting 41,211 as neck in your name · (job 357|12,000 of 41,211 accepted \(job 357\))$/u);
+    await settle();
+    expect(host.querySelector(".qgrid-said")?.textContent).toBe("Accepting 41,211 as neck in your name · 12,000 of 41,211 accepted (job 357)");
+    expect(calls.at(-1)?.url).toBe("/api/jobs/357");
+    // while the job runs, the page is not read again and the band button waits
+    expect(scansRead()).toBe(reads);
+    expect(host.querySelector<HTMLButtonElement>(".pg-foot .pg-band-accept")?.disabled).toBe(true);
+    // the next read finds the job done: what it wrote, the re-sort followed to its end, and the page read again
+    await act(async () => new Promise((r) => setTimeout(r, 3200)));
+    await settle();
+    await settle();
+    await settle();
+    expect(host.querySelector(".qgrid-said")?.textContent).toBe("Accepted 41,209 as neck and corrected 1 (1 brain) in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 3 questions closed · 41,210 of 41,210 sorted again");
+    expect(calls.some((c) => c.url === "/api/jobs/358")).toBe(true);
+    expect(scansRead()).toBe(reads + 1);
+    expect(calls.filter((c) => c.url.startsWith("/api/review/proposals/scans?")).at(-1)?.url).toBe("/api/review/proposals/scans?model=12&axis=body_part&value=neck&page=1&size=250");
+    // the band holds the one scan a person decided meanwhile: it fits the page, so the band button is gone
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(1);
+    expect(host.querySelector(".pg-state")?.textContent).toBe("page 1 of 1 · 1 neck");
+    expect(host.querySelector(".pg-band-accept")).toBeNull();
+    // three seconds of the follow's own clock: longer than the default on a busy machine
+  }, 20_000);
+
+  it("reads the page again when the band moved on, and offers no band without the door or when the band fits one page", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    // the page says 41,212 but the engine counts otherwise: the 409 names both and the page is read again
+    const fetched = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (url === "/api/review/proposals/accept-band") {
+        calls.push({ method: "POST", url, body: JSON.parse(String(init?.body)) as Json });
+        return new Response(JSON.stringify({ error: "bodypart-cascade@r7-fast proposes neck on 41,200 scans in this band now, not 41,212: read the page again" }), { status: 409 });
+      }
+      return fetched(url, init);
+    });
+    await click(host.querySelector(".pg-foot .pg-band-accept")!);
+    const reads = calls.filter((c) => c.url.startsWith("/api/review/proposals/scans?")).length;
+    await click([...host.querySelectorAll("dialog button")].find((b) => b.textContent === "Accept all 41,212")!);
+    await settle();
+    await settle();
+    expect(host.querySelector("dialog")).toBeNull();
+    expect(host.querySelector(".qgrid-said")?.textContent).toBe("bodypart-cascade@r7-fast proposes neck on 41,200 scans in this band now, not 41,212: read the page again. The page is read again.");
+    expect(calls.filter((c) => c.url.startsWith("/api/review/proposals/scans?")).length).toBe(reads + 1);
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    // brain fits one page: the page Accept is the move
+    await click(host.querySelectorAll(".pg-values .opt")[2]);
+    await settle();
+    expect(host.querySelector(".pg-state")?.textContent).toBe("page 1 of 1 · 200 brain");
+    expect(host.querySelector(".pg-band-accept")).toBeNull();
+    expect(host.querySelector(".pg-foot .button")?.textContent).toBe("Accept 199 as brain Enter");
+    // an engine without the door, or a reader: no second button
+    act(() => root.unmount());
+    root = createRoot(host);
+    await act(async () => root.render(<ProposalGrid caps={noBand} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    expect(host.querySelectorAll(".pg-tile")).toHaveLength(250);
+    expect(host.querySelector(".pg-band-accept")).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(host);
+    await act(async () => root.render(<ProposalGrid caps={reader} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    expect(host.querySelector(".pg-band-accept")).toBeNull();
   });
 
   it("offers no accept to a reader, and refuses with the way out when the page moved on", async () => {

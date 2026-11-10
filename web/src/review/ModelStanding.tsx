@@ -16,6 +16,7 @@ import { useState } from "react";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { refusalWords } from "./client";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { campaignWords, commitWords, REST_LIMIT, REST_ORDERS, standingDoors, thresholdWords, type CommitAnswer, type RestOrder, type Standing } from "./modelFamily";
 import { estimateWords } from "./resort";
 import { axisTitle, modelInWords, modelSub, modelWords } from "./work";
@@ -82,42 +83,9 @@ export function confirmWords(s: Standing): string {
   return `${n(s.commit.stacks)} scans get ${axisTitle(s.axis).toLowerCase()} = what the model proposed${at}, in your name. Every page shows it once they are sorted again.`;
 }
 
-/** The confirm of a commit: one paragraph, Commit, Cancel. The button goes quiet while the call is out; the dialog closes on the answer. */
+/** The confirm of a commit: one paragraph, Commit, Cancel (ConfirmDialog). The button goes quiet while the call is out; the dialog closes on the answer. */
 export function CommitStandingDialog({ s, onClose, onDone }: { s: Standing; onClose: () => void; onDone: (answer: CommitAnswer) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [refused, setRefused] = useState<string | null>(null);
-  const go = () => {
-    if (busy) return;
-    setBusy(true);
-    setRefused(null);
-    standingDoors.commit(s).then(
-      (r) => onDone(r),
-      (e: unknown) => {
-        setBusy(false);
-        setRefused(refusalWords(e));
-      },
-    );
-  };
-  return (
-    <Dialog
-      title="Commit at or above the threshold"
-      icon="review"
-      onClose={onClose}
-      foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={busy} aria-busy={busy || undefined} onClick={go}>
-            {busy ? "Committing…" : `Commit ${n(s.commit.stacks)}`}
-          </button>
-          <button type="button" className="button secondary" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          {refused && <span className="warn">{refused}</span>}
-        </div>
-      }
-    >
-      <p className="lede">{confirmWords(s)}</p>
-    </Dialog>
-  );
+  return <ConfirmDialog title="Commit at or above the threshold" words={confirmWords(s)} button={`Commit ${n(s.commit.stacks)}`} busyWords="Committing…" go={() => standingDoors.commit(s)} onClose={onClose} onDone={onDone} />;
 }
 
 /** The choices of how many: the default cap, and the whole lot where it is more. */
