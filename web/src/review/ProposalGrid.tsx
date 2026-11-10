@@ -13,7 +13,12 @@
 // that scan or for every scan set apart, the pick frames the tile in the
 // value's colour with the word in its corner, and the one Accept writes the
 // corrections beside the rest. Only where the engine says what values the
-// axis takes; an older engine's grid is as before.
+// axis takes; an older engine's grid is as before. UX round 6, item 5: a
+// second, quieter button under the grid takes the whole band for the value
+// chosen (every scan the band holds, not the page), after the commit's
+// confirm, as a job the said line follows: how many are accepted, then the
+// re-sort, and the page is read again once the decisions are written. Only
+// where the engine has the band door and the band holds more than the page.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -23,7 +28,8 @@ import type { Scan } from "../data/scans";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { useFollowedJob } from "./resort";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { jobOver, useFollowedJob } from "./resort";
 import {
   acceptBody,
   acceptWords,
@@ -31,6 +37,14 @@ import {
   acceptedWords,
   type Accepted,
   listedOf,
+  bandAcceptWords,
+  bandBody,
+  bandConfirmWords,
+  bandFollowLine,
+  bandOffered,
+  bandResultOf,
+  bandServed,
+  type BandSent,
   bandWords,
   chooseValue,
   closeList,
@@ -108,7 +122,16 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   // the last accept and the page it was made on: the said line follows the re-sort job it queued, as the commit's does
   const [accepted, setAccepted] = useState<{ a: Accepted; was: GridState } | null>(null);
   const job = useFollowedJob(accepted?.a.resort?.job ?? null);
-  const line = accepted && job ? acceptedFollowLine(accepted.a, accepted.was, job) : said;
+  // the whole band accepted as a job (item 5): the line follows that job, then the re-sort its result names, and the
+  // page is read again once the job is over (the decisions are written; the band is empty, or holds what a person
+  // decided meanwhile)
+  const [band, setBand] = useState<BandSent | null>(null);
+  const [asking, setAsking] = useState(false);
+  const latest = useRef<Filter>(given);
+  const bandJob = useFollowedJob(band?.queued.job ?? null, () => void read(latest.current));
+  const resortJob = useFollowedJob(bandJob?.state === "done" ? (bandResultOf(bandJob.result).resort?.job ?? null) : null);
+  const line = band ? bandFollowLine(band, bandJob, resortJob) : accepted && job ? acceptedFollowLine(accepted.a, accepted.was, job) : said;
+  const following = band !== null && !(bandJob !== null && jobOver(bandJob.state));
   const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
   const [since, setSince] = useState(Date.now());
@@ -118,12 +141,14 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   const seq = useRef(0);
   const gridEl = useRef<HTMLDivElement | null>(null);
   const accepting = mayAccept(caps);
+  const banding = bandServed(caps);
   // the first read opens the filter: the value with the most scans, the band below the threshold
   const opened = useRef(false);
 
   const read = useCallback(
     (f: Filter) => {
       const mine = ++seq.current;
+      latest.current = f;
       setSince(Date.now());
       setReading(true);
       return grid.scans(model, axis, f).then(
@@ -148,6 +173,8 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     setState(null);
     setSaid(null);
     setAccepted(null);
+    setBand(null);
+    setAsking(false);
     // one small read for the counts, then the page under the filter they open
     grid.scans(model, axis, given, 1, 1).then(
       (p) => {
@@ -181,6 +208,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     grid
       .accept(body)
       .then((a) => {
+        setBand(null);
         setSaid(acceptedWords(a, was));
         setAccepted(a.resort?.job ? { a, was } : null);
         // the next page: the scans accepted left the set, so the first page is the next
@@ -188,6 +216,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       })
       .catch((e: unknown) => {
         const r = refusedWords(e);
+        setBand(null);
         setSaid(r.words);
         setAccepted(null);
         if (r.stale) void read(filter);
@@ -195,13 +224,22 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       .finally(() => setBusy(false));
   }, [state, busy, accepting, filter, read]);
 
-  // the keys, on the window while the page is open; a field or the full view keeps its own
-  const keyed = useRef({ state, apply, full });
-  keyed.current = { state, apply, full };
+  /** The second button: the confirm opens for the whole band. */
+  const askBand = useCallback(() => {
+    if (!state || busy || following) return;
+    if (!banding) return setSaid("Accepting needs work on the Review page.");
+    if (!bandBody(state, filter)) return setSaid("Choose a value first.");
+    setAsking(true);
+  }, [state, busy, following, banding, filter]);
+  const bandAsked = asking && state ? bandBody(state, filter) : null;
+
+  // the keys, on the window while the page is open; a field, the full view or the band's confirm keeps its own
+  const keyed = useRef({ state, apply, full, asking });
+  keyed.current = { state, apply, full, asking };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
-      if (!k.state || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!k.state || k.asking || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (t?.closest?.("dialog")) return;
@@ -244,23 +282,55 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   }, [state?.focus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <GridBody
-      state={state}
-      axis={axis}
-      filter={filter}
-      failed={failed}
-      said={line}
-      reading={reading}
-      busy={busy}
-      full={full}
-      since={since}
-      accepting={accepting}
-      grid={gridEl}
-      onState={setState}
-      onFilter={narrow}
-      onApply={apply}
-      onFull={setFull}
-    />
+    <>
+      <GridBody
+        state={state}
+        axis={axis}
+        filter={filter}
+        failed={failed}
+        said={line}
+        reading={reading}
+        busy={busy}
+        following={following}
+        full={full}
+        since={since}
+        accepting={accepting}
+        banding={banding}
+        grid={gridEl}
+        onState={setState}
+        onFilter={narrow}
+        onApply={apply}
+        onBand={askBand}
+        onFull={setFull}
+      />
+      {bandAsked && state && (
+        <ConfirmDialog
+          title="Accept them all"
+          words={bandConfirmWords(state, filter)}
+          button={`Accept all ${n(bandAsked.count)}`}
+          busyWords="Accepting…"
+          go={() => grid.acceptBand(bandAsked)}
+          onClose={() => setAsking(false)}
+          onDone={(queued) => {
+            setAsking(false);
+            setAccepted(null);
+            setSaid(null);
+            setBand({ body: bandAsked, queued, was: state });
+          }}
+          onRefused={(e) => {
+            // the registry moved (a decision, a campaign, another run): the page is read again, as the page accept's stale case
+            const r = refusedWords(e);
+            if (!r.stale) return r.words;
+            setAsking(false);
+            setBand(null);
+            setAccepted(null);
+            setSaid(r.words);
+            void read(filter);
+            return null;
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -272,13 +342,18 @@ export interface GridBodyProps {
   said: string | null;
   reading: boolean;
   busy: boolean;
+  /** A band accept's job under way: the band button waits for it. */
+  following?: boolean;
   full: boolean;
   since?: number;
   accepting: boolean;
+  /** The engine takes a whole band in one move and the person may accept. */
+  banding?: boolean;
   grid?: React.RefObject<HTMLDivElement | null>;
   onState: (f: (s: GridState | null) => GridState | null) => void;
   onFilter: (f: Filter) => void;
   onApply: () => void;
+  onBand?: () => void;
   onFull: (open: boolean) => void;
 }
 
@@ -381,6 +456,11 @@ export function GridBody(p: GridBodyProps) {
           <button type="button" className="button" disabled={p.busy || !p.accepting || !value || (t?.accept ?? 0) === 0} onClick={p.onApply}>
             {acceptWords(s, p.filter)} <kbd>Enter</kbd>
           </button>
+          {p.banding && bandOffered(s, p.filter) && (
+            <button type="button" className="button secondary pg-band-accept" disabled={p.busy || p.following} onClick={p.onBand}>
+              {bandAcceptWords(s, p.filter)}
+            </button>
+          )}
           {t && (
             <span className="q-tally" role="status" aria-live="polite">
               {t.corrected > 0 || t.apart > 0 ? (

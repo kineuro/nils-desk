@@ -8,7 +8,9 @@
 // can name takes its right value (UX round 6, item 4): 0 or the tile's
 // corner opens the axis's value list once, the pick frames the tile in that
 // value's colour, and the one Accept writes the model's value on the rest
-// and the person's on the corrected, as corrections of the proposal. The
+// and the person's on the corrected, as corrections of the proposal. A
+// second move takes the whole band for the value chosen, without a look at
+// each picture, as a job the page follows (UX round 6, item 5). The
 // rules' question grid (./questions.ts) is the seed: the same pictures, the
 // same page shape, the same keys. Everything here is pure, so the page and
 // its tests read one shape; the component is ProposalGrid.tsx.
@@ -19,11 +21,14 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
 import { jobOver, sortedLine } from "./resort";
+import { axisTitle } from "./work";
 
 /** The doors, as the engine's capabilities name them. */
 export const GRID_DOORS = {
   scans: "GET /api/review/proposals/scans",
   accept: "POST /api/review/proposals/accept",
+  /** UX round 6, item 5: every scan of the band, for the value chosen, as a job. */
+  band: "POST /api/review/proposals/accept-band",
 } as const;
 
 /** How many scans a page shows unless the person chooses otherwise, and the sizes offered. */
@@ -38,6 +43,11 @@ export function gridServed(caps: Capabilities): boolean {
 /** Whether the person may accept here. */
 export function mayAccept(caps: Capabilities): boolean {
   return served(caps, GRID_DOORS.accept) && may(caps, "review:work");
+}
+
+/** Whether the engine takes a whole band in one move and the person may accept: the same need as the page accept. */
+export function bandServed(caps: Capabilities): boolean {
+  return served(caps, GRID_DOORS.band) && may(caps, "review:work");
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -206,6 +216,44 @@ export function acceptedOf(raw: Json): Accepted {
   };
 }
 
+/** What the band door answered at once: the job that writes the decisions, how many scans it takes, and its words. */
+export interface BandQueued {
+  job: number | null;
+  stacks: number;
+  words: string | null;
+}
+
+/** The band door's reply, read into one shape; a field left out is nothing. */
+export function bandQueuedOf(raw: Json): BandQueued {
+  return { job: num(raw.job), stacks: num(raw.stacks) ?? 0, words: str(raw.words) };
+}
+
+/** What the band's job did, as its result says it: the same counts as a page accept, the exceptions as `excepted`. */
+export interface BandResult {
+  decided: number;
+  corrected: number;
+  keptDecided: number;
+  leftOutSealed: number;
+  excepted: number;
+  closed: number;
+  resort: { job: number | null; state: string; stacks: number } | null;
+}
+
+/** The job's result, read tolerantly: a field missing is zero or null; `closed` is a count, or a list's length. */
+export function bandResultOf(raw: Json | null | undefined): BandResult {
+  const r = raw ?? {};
+  const resort = obj(r.resort);
+  return {
+    decided: num(r.decided) ?? 0,
+    corrected: num(r.corrected) ?? 0,
+    keptDecided: num(r.kept_decided) ?? 0,
+    leftOutSealed: num(r.left_out_sealed) ?? 0,
+    excepted: num(r.excepted) ?? 0,
+    closed: num(r.closed) ?? (Array.isArray(r.closed) ? r.closed.length : 0),
+    resort: resort ? { job: num(resort.job), state: str(resort.state) ?? "done", stacks: num(resort.stacks) ?? 0 } : null,
+  };
+}
+
 // ------------------------------------------------------------ the filter
 
 /** How the page is narrowed: the value proposed, the band, the size. Null leaves an edge open. */
@@ -271,10 +319,28 @@ export interface AcceptBody extends Json {
   corrections?: { stack: number; value: string }[];
 }
 
+/**
+ * The band door's body (UX round 6, item 5): the value and the band as the page shows them, `count` as the page said
+ * the band holds (the guard in place of `seen`), and the page's exceptions and corrections as the page accept sends them.
+ */
+export interface BandBody extends Json {
+  model: string;
+  axis: string;
+  value: string;
+  min?: number;
+  max?: number;
+  count: number;
+  except: number[];
+  corrections?: { stack: number; value: string }[];
+  why?: string;
+}
+
 export const grid = {
   /** One page of a model's proposals on an axis, narrowed by the filter. */
   scans: (model: number | string, axis: string, f: Filter, page = 1, size = f.size) => door<Json>("GET", `/api/review/proposals/scans${q({ model, axis, value: f.value, min: f.min, max: f.max, page, size })}`).then(pageOf),
   accept: (body: AcceptBody) => door<Json>("POST", "/api/review/proposals/accept", body).then(acceptedOf),
+  /** Every scan of the band, for the value, as a job the page follows. */
+  acceptBand: (body: BandBody) => door<Json>("POST", "/api/review/proposals/accept-band", body).then(bandQueuedOf),
 };
 
 // ------------------------------------------------------------ the grid's state
@@ -443,6 +509,27 @@ export function acceptBody(s: GridState, f: Filter): AcceptBody | null {
   };
 }
 
+/**
+ * Whether the page offers the whole band in one move: a value is chosen and the band holds more than the page shows;
+ * with everything on one page, the page's Accept is the move.
+ */
+export function bandOffered(s: Pick<GridState, "page">, f: Pick<Filter, "value">): boolean {
+  const value = s.page.value ?? f.value;
+  return !!value && s.page.total > s.page.scans.length;
+}
+
+/**
+ * The band door's body for the page as it stands: the value and the band, the count the page said the band holds,
+ * and the page's set-apart scans as exceptions and corrected ones with the person's value, as the page accept sends
+ * them; null without a value or where nothing waits.
+ */
+export function bandBody(s: GridState, f: Filter): BandBody | null {
+  const page = acceptBody(s, f);
+  if (!page || s.page.total === 0) return null;
+  const { seen: _seen, ...rest } = page;
+  return { ...rest, count: s.page.total };
+}
+
 export type GridAct = { kind: "apart" } | { kind: "list" } | { kind: "apply" } | { kind: "move"; by: number } | { kind: "full" } | { kind: "back" } | { kind: "none" };
 
 /** What a key does on the grid. `columns` is how many scans a row holds now, for up and down. */
@@ -504,16 +591,19 @@ export function acceptWords(s: GridState, f: Filter): string {
   return `Accept ${nf(t.accept)} as ${value}${t.corrected > 0 ? ` · ${nf(t.corrected)} corrected` : ""}`;
 }
 
-/** What the accept did, before the re-sort: what was written as the model's value and as the person's, set apart, kept and closed. */
-function acceptedHead(a: Accepted, s: GridState | null): string[] {
-  const values = s && a.corrected > 0 ? correctedWords(s) : "";
-  const corrected = a.corrected > 0 ? ` and corrected ${nf(a.corrected)}${values ? ` (${values})` : ""}` : "";
-  const parts = [`Accepted ${nf(a.decided)} as ${a.value}${corrected} in your name`];
-  const apart = s ? tally(s).apart : a.setApart;
-  if (apart > 0) parts.push(`${nf(apart)} set apart ${apart === 1 ? "stays a proposal" : "stay proposals"}`);
-  if (a.keptDecided > 0) parts.push(`${nf(a.keptDecided)} ${a.keptDecided === 1 ? "keeps" : "keep"} a person's decision`);
-  if (a.closed.length > 0) parts.push(`${nf(a.closed.length)} ${a.closed.length === 1 ? "question" : "questions"} closed`);
+/** What an accept wrote, before the re-sort: as the model's value and as the person's, set apart, kept and closed. */
+function writtenHead(w: { value: string; decided: number; corrected: number; apart: number; keptDecided: number; closed: number }, values: string): string[] {
+  const corrected = w.corrected > 0 ? ` and corrected ${nf(w.corrected)}${values ? ` (${values})` : ""}` : "";
+  const parts = [`Accepted ${nf(w.decided)} as ${w.value}${corrected} in your name`];
+  if (w.apart > 0) parts.push(`${nf(w.apart)} set apart ${w.apart === 1 ? "stays a proposal" : "stay proposals"}`);
+  if (w.keptDecided > 0) parts.push(`${nf(w.keptDecided)} ${w.keptDecided === 1 ? "keeps" : "keep"} a person's decision`);
+  if (w.closed > 0) parts.push(`${nf(w.closed)} ${w.closed === 1 ? "question" : "questions"} closed`);
   return parts;
+}
+
+/** What the page accept did, before the re-sort. */
+function acceptedHead(a: Accepted, s: GridState | null): string[] {
+  return writtenHead({ ...a, apart: s ? tally(s).apart : a.setApart, closed: a.closed.length }, s && a.corrected > 0 ? correctedWords(s) : "");
 }
 
 /** What the accept did, in a line, and that the sort runs again. */
@@ -544,6 +634,79 @@ export function refusedWords(e: unknown): { words: string; stale: boolean } {
     return { words: said || e.message, stale: false };
   }
   return { words: e instanceof Error ? e.message : String(e), stale: false };
+}
+
+// ------------------------------------------------------------ the whole band (UX round 6, item 5)
+
+/** The secondary button: `Accept all 41,212 neck at 0.80 or above`; `Accept all 41,212 neck` for the whole range. */
+export function bandAcceptWords(s: Pick<GridState, "page">, f: Filter): string {
+  const value = s.page.value ?? f.value ?? "the value";
+  return `Accept all ${[nf(s.page.total), value, bandWords(f.min, f.max)].filter(Boolean).join(" ")}`;
+}
+
+/**
+ * The confirm's one paragraph: what the scans get, from whom, in whose name, without a look; what this page's
+ * set-apart and corrected scans do, where there are any; and when every page shows it.
+ */
+export function bandConfirmWords(s: GridState, f: Filter): string {
+  const value = s.page.value ?? f.value ?? "the value";
+  const t = tally(s);
+  const band = bandWords(f.min, f.max);
+  const head = `${nf(s.page.total)} scans get ${axisTitle(s.page.axis).toLowerCase()} = ${value}, what the model proposed${band ? ` ${band}` : ""}, in your name, without a look at each picture.`;
+  const middle = [t.apart > 0 ? `${nf(t.apart)} set apart on this page ${t.apart === 1 ? "stays a proposal" : "stay proposals"}` : null, t.corrected > 0 ? `${nf(t.corrected)} corrected ${t.corrected === 1 ? "gets its" : "get their"} value` : null].filter(Boolean).join("; ");
+  return [head, middle ? `${middle}.` : null, "Every page shows it once they are sorted again."].filter(Boolean).join(" ");
+}
+
+/** A band accept the page sent and follows: its body, the door's answer, and the page it was made on. */
+export interface BandSent {
+  body: BandBody;
+  queued: BandQueued;
+  was: GridState;
+}
+
+type JobLike = Pick<JobRow, "state" | "progress" | "error" | "result">;
+
+/** What the band accept is doing: `Accepting 41,212 as neck in your name`. */
+const acceptingHead = (b: BandSent) => `Accepting ${nf(b.queued.stacks || b.body.count)} as ${b.body.value} in your name`;
+
+/** The line once the door answered: `Accepting 41,212 as neck in your name · job 357`. */
+export function bandSaidLine(b: BandSent): string {
+  return b.queued.job !== null ? `${acceptingHead(b)} · job ${b.queued.job}` : acceptingHead(b);
+}
+
+/** How far the band's job is: `12,000 of 41,212 accepted`, or where it stopped and that what was written stands. */
+export function acceptingLine(job: JobLike, stacks: number): string {
+  const p = (job.progress ?? {}) as { done?: unknown; of?: unknown };
+  const of = typeof p.of === "number" ? p.of : stacks;
+  const done = typeof p.done === "number" ? p.done : 0;
+  switch (job.state) {
+    case "failed": {
+      const why = job.error ?? ((job.result ?? {}) as { words?: unknown }).words;
+      return `Stopped at ${nf(done)} of ${nf(of)}${typeof why === "string" && why ? `: ${why}` : ""}; what was written stands`;
+    }
+    case "cancelled":
+      return `Stopped at ${nf(done)} of ${nf(of)}; what was written stands`;
+    case "queued":
+      return `${nf(done)} of ${nf(of)} accepted · waiting for a worker`;
+    default:
+      return `${nf(done)} of ${nf(of)} accepted`;
+  }
+}
+
+/**
+ * The line while the page follows the band's job, then the re-sort it queued: `Accepting 41,212 as neck in your name ·
+ * 12,000 of 41,212 accepted (job 357)`; once the job is done, what it wrote as the page accept's line says it, then
+ * `N of N sorted again` as the commit's line follows the re-sort.
+ */
+export function bandFollowLine(b: BandSent, job: JobLike | null, resort: JobLike | null): string {
+  if (!job) return bandSaidLine(b);
+  const stacks = b.queued.stacks || b.body.count;
+  if (job.state !== "done") return `${acceptingHead(b)} · ${acceptingLine(job, stacks)}${jobOver(job.state) ? "" : ` (job ${b.queued.job})`}`;
+  const r = bandResultOf(job.result);
+  const parts = writtenHead({ value: b.body.value, decided: r.decided, corrected: r.corrected, apart: r.excepted, keptDecided: r.keptDecided, closed: r.closed }, r.corrected > 0 ? correctedWords(b.was) : "");
+  if (r.resort?.job) parts.push(`${sortedLine(resort ?? { state: "queued", progress: null, error: null, result: null }, r.resort.stacks || r.decided + r.corrected)}${resort && jobOver(resort.state) ? "" : ` (job ${r.resort.job})`}`);
+  else if (r.resort && r.resort.state === "done" && r.decided + r.corrected > 0) parts.push("sorted again");
+  return parts.join(" · ");
 }
 
 /** A tile's hover: the scan's name, the value now, the probability, and the person's value where one is set. */

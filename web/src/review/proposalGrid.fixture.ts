@@ -2,8 +2,9 @@
 // Fixtures of the batch accept grid's doors (UX round 5), in the shapes the
 // engine answers: a body-part model's unsure proposals, three values (neck,
 // spine, brain) over a band below its threshold, paged; and what the accept
-// door says, corrections counted (UX round 6, item 4). The pictures are
-// small grey discs. Every value is made up.
+// door says, corrections counted (UX round 6, item 4); and the band door's
+// answer and the job that writes a whole band (UX round 6, item 5). The
+// pictures are small grey discs. Every value is made up.
 
 import type { Json } from "../ask/client";
 import { picture } from "./questions.fixture";
@@ -97,6 +98,48 @@ export interface AcceptSent {
   min?: number;
   max?: number;
   corrections?: { stack: number; value: string }[];
+}
+
+/** The band door's body, as the fixture reads it (UX round 6, item 5). */
+export interface BandSentBody {
+  value: string;
+  count: number;
+  min?: number;
+  max?: number;
+  except: number[];
+  corrections?: { stack: number; value: string }[];
+}
+
+/** How many scans the band's job writes: the band's count but the exceptions (the corrections are written, with the person's value). */
+export const bandWrites = (body: BandSentBody): number => Math.max(0, body.count - body.except.length);
+
+/** What the band door answers at once: the job that writes the decisions and how many scans it takes. */
+export function bandQueued(body: BandSentBody, job = 357): Json {
+  return { job, stacks: bandWrites(body), words: `accepting ${bandWrites(body)} as ${body.value} in your name as job ${job}` };
+}
+
+/**
+ * The band's job as the jobs door shows it: `done` scans of the band accepted; once all are, done with its result,
+ * the counts and the re-sort it queued (one scan of the band a person decided meanwhile is kept).
+ */
+export function bandJob(body: BandSentBody, done: number, job = 357, resort = 358): Json {
+  const of = bandWrites(body);
+  const over = done >= of;
+  const corrected = (body.corrections ?? []).length;
+  const written = Math.max(0, of - 1);
+  return {
+    id: job,
+    kind: "accept-band",
+    name: `accept ${of} ${body.value} in astrid's name`,
+    state: over ? "done" : "running",
+    started_at: "2026-11-10T09:00:00Z",
+    heartbeat_at: null,
+    finished_at: over ? "2026-11-10T09:02:00Z" : null,
+    progress: { done: Math.min(done, of), of, what: "scans" },
+    error: null,
+    args: {},
+    result: over ? { decided: written - corrected, corrected, kept_decided: 1, left_out_sealed: 0, excepted: body.except.length, closed: 3, resort: { job: resort, state: "queued", stacks: written } } : null,
+  };
 }
 
 /** What the accept door says after a page: the model's value on the rest, the person's on the corrections. */
