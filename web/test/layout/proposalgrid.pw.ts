@@ -149,7 +149,9 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator('.pg-tile[data-stack="1004"]')).toHaveAttribute("data-slot", "2");
       await expect(page.getByRole("button", { name: /^Accept 498 as neck · 1 corrected/u })).toBeVisible();
       await expect(page.locator(".pg-foot .q-tally")).toContainText("1 corrected (1 brain)");
-      // the last tile of the first row: its list opens within the grid, leftward; with two set apart, for both
+      // another tile set apart with no value, then the last tile of the first row: its list opens within the
+      // grid, leftward, for the two set apart; the corrected tile keeps its value and is not swept along
+      await page.locator('.pg-tile[data-stack="1001"]').click();
       const boxes = await page.locator(".pg-tile").evaluateAll((els) => els.slice(0, 24).map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
       const columns = boxes.filter((b) => Math.round(b.top) === Math.round(boxes[0].top)).length;
       const last = page.locator(`.pg-tile[data-stack="${1000 + columns - 1}"]`);
@@ -167,6 +169,8 @@ for (const vp of VIEWPORTS) {
       await expect(pop2).toHaveCount(0);
       await last.click();
       await expect(last).not.toHaveClass(/apart/);
+      await page.locator('.pg-tile[data-stack="1001"]').click();
+      await expect(page.locator('.pg-tile[data-stack="1001"]')).not.toHaveClass(/apart/);
       // Enter: the correction goes with the body, out of except; the line says both
       await page.locator("body").click({ position: { x: 2, y: 2 } });
       await page.keyboard.press("Enter");
