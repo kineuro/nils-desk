@@ -13,7 +13,13 @@
 // that scan or for every scan set apart, the pick frames the tile in the
 // value's colour with the word in its corner, and the one Accept writes the
 // corrections beside the rest. Only where the engine says what values the
-// axis takes; an older engine's grid is as before. UX round 6, item 5: a
+// axis takes; an older engine's grid is as before. The axis's values sit on
+// the number keys as the gallery's answers do (1 to 9, in the pack's order,
+// a row of numbered chips in each value's colour over the Accept): a key or
+// its chip gives the value to the scans set apart and still without one, or
+// to the scan in focus, and the proposed value's key puts a scan back with
+// the rest, so one Accept writes the accepted and the changed, and the ones
+// set apart with no value stay proposals. UX round 6, item 5: a
 // second, quieter button under the grid takes the whole band for the value
 // chosen (every scan the band holds, not the page), after the commit's
 // confirm, as a job the said line follows: how many are accepted, then the
@@ -46,6 +52,7 @@ import {
   bandServed,
   type BandSent,
   bandWords,
+  chooseKey,
   chooseValue,
   closeList,
   correctedWords,
@@ -56,6 +63,8 @@ import {
   gridHref,
   gridOf,
   keyAct,
+  keyedValues,
+  keyedWords,
   mayAccept,
   moved,
   openList,
@@ -257,6 +266,8 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       switch (act.kind) {
         case "apart":
           return setState((s) => (s && s.focus !== null ? spaceApart(s, s.focus) : s));
+        case "key":
+          return setState((s) => (s ? chooseKey(s, act.key) : s));
         case "list":
           return setState((s) => (s ? openList(s) : s));
         case "apply":
@@ -367,6 +378,7 @@ export function GridBody(p: GridBodyProps) {
   const set = (f: (s: GridState) => GridState) => p.onState((x) => (x ? f(x) : x));
   const value = page?.value ?? p.filter.value;
   const empty = page !== null && page.total === 0;
+  const keyed = s ? keyedValues(s) : [];
   return (
     <section className="qgrid-page pgrid-page" aria-label="proposals">
       <div className="qgrid-head">
@@ -453,6 +465,45 @@ export function GridBody(p: GridBodyProps) {
       )}
       {s && page && !empty && (
         <div className="pg-foot" role="toolbar" aria-label="accept">
+          {keyed.length > 0 && (
+            <span className="pg-kinds" role="group" aria-label={`A value for ${keyedWords(s)}`}>
+              <span className="meta pg-kinds-for">{keyedWords(s)}</span>
+              {keyed.map((v, i) => {
+                const on = v === value;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    className={on ? "opt q-chip on" : "opt q-chip"}
+                    title={on ? `${v}, as the model proposed: back with the rest` : `${v} for ${keyedWords(s)}`}
+                    {...valueTone(palette, v)}
+                    onClick={(e) => {
+                      set((y) => chooseKey(y, i + 1));
+                      e.currentTarget.blur();
+                    }}
+                  >
+                    <kbd>{i + 1}</kbd>
+                    {v}
+                  </button>
+                );
+              })}
+              {page.legal.length > keyed.length && (
+                <button
+                  type="button"
+                  className={s.listing !== null ? "opt q-other on" : "opt q-other"}
+                  aria-expanded={s.listing !== null}
+                  title={`another value for ${keyedWords(s)}`}
+                  onClick={(e) => {
+                    set((y) => openList(y));
+                    e.currentTarget.blur();
+                  }}
+                >
+                  <kbd>0</kbd>
+                  other…
+                </button>
+              )}
+            </span>
+          )}
           <button type="button" className="button" disabled={p.busy || !p.accepting || !value || (t?.accept ?? 0) === 0} onClick={p.onApply}>
             {acceptWords(s, p.filter)} <kbd>Enter</kbd>
           </button>
@@ -471,7 +522,7 @@ export function GridBody(p: GridBodyProps) {
                   </span>
                 ))
               ) : (
-                <span className="meta">click a wrong one to set it apart{corrects(s) ? ", 0 gives it its value" : ""}</span>
+                <span className="meta">click a wrong one to set it apart{keyed.length > 0 ? `, ${keyed.length > 1 ? `1 to ${keyed.length}` : "1"} gives it its value` : ""}</span>
               )}
               {t.decided > 0 ? <> · <b>{n(t.decided)}</b> decided by a person, kept</> : null}
             </span>
@@ -484,9 +535,15 @@ export function GridBody(p: GridBodyProps) {
             <span>
               <kbd>shift</kbd>click a range
             </span>
-            {corrects(s) && (
+            {keyed.length > 0 && (
               <span>
-                <kbd>0</kbd>other value
+                <kbd>1</kbd>
+                {keyed.length > 1 ? (
+                  <>
+                    …<kbd>{keyed.length}</kbd>
+                  </>
+                ) : null}
+                its value
               </span>
             )}
             <span>

@@ -390,9 +390,21 @@ export function spaceApart(s: GridState, stack: number): GridState {
   return stack in s.corrections ? dropCorrection(s, stack) : toggleApart(s, stack);
 }
 
-/** The person's value for a set-apart scan; nothing for a scan not on the page or a value the axis does not take. */
+/**
+ * The person's value for a scan; nothing for a scan not on the page or a value the axis does not take. The value the
+ * model proposed is no correction: the scan goes back with the rest, and Accept writes it as proposed.
+ */
 export function setCorrection(s: GridState, stack: number, value: string): GridState {
-  if (!s.page.scans.some((x) => x.stack === stack) || !s.page.legal.includes(value)) return s;
+  const scan = s.page.scans.find((x) => x.stack === stack);
+  if (!scan || !s.page.legal.includes(value)) return s;
+  if (value === scan.proposed) {
+    if (!(stack in s.apart) && !(stack in s.corrections)) return s;
+    const apart = { ...s.apart };
+    const corrections = { ...s.corrections };
+    delete apart[stack];
+    delete corrections[stack];
+    return { ...s, apart, corrections };
+  }
   return { ...s, apart: { ...s.apart, [stack]: true }, corrections: { ...s.corrections, [stack]: value } };
 }
 
@@ -435,6 +447,43 @@ export function chooseValue(s: GridState, value: string): GridState {
   if (s.listing === "apart") for (const stack of listedOf(s)) out = setCorrection(out, stack, value);
   else out = setCorrection(out, s.listing, value);
   return out;
+}
+
+/** How many values the number keys carry: 1 to 9. */
+export const KEYED = 9;
+
+/**
+ * The values on the number keys: the axis's first nine in the pack's order, so a key keeps its value on every page
+ * and for every value proposed. A longer axis keeps the rest in the list (0).
+ */
+export function keyedValues(s: Pick<GridState, "page">): string[] {
+  return s.page.legal.slice(0, KEYED);
+}
+
+/**
+ * The scans a number key or its chip gives a value: where the focus is set apart, every scan set apart and still
+ * without a value (and the focus), as the list for the set apart; else the scan in focus alone.
+ */
+export function keyedScans(s: GridState): number[] {
+  const focus = s.focus;
+  if (focus === null || !s.page.scans.some((x) => x.stack === focus)) return [];
+  return focus in s.apart ? listedOf(s) : [focus];
+}
+
+/** A number key or its chip: that value for those scans, in one move; an open list closes. */
+export function chooseKey(s: GridState, key: number): GridState {
+  const value = keyedValues(s)[key - 1];
+  const scans = keyedScans(s);
+  if (value === undefined || scans.length === 0) return s;
+  let out: GridState = { ...s, listing: null, anchor: s.focus };
+  for (const stack of scans) out = setCorrection(out, stack, value);
+  return out;
+}
+
+/** Whom the number keys name now: `the 3 set apart`, or `scan in focus`. */
+export function keyedWords(s: GridState): string {
+  const count = keyedScans(s).length;
+  return count > 1 ? `the ${nf(count)} set apart` : "scan in focus";
 }
 
 /** The list closed, nothing chosen. */
@@ -530,11 +579,12 @@ export function bandBody(s: GridState, f: Filter): BandBody | null {
   return { ...rest, count: s.page.total };
 }
 
-export type GridAct = { kind: "apart" } | { kind: "list" } | { kind: "apply" } | { kind: "move"; by: number } | { kind: "full" } | { kind: "back" } | { kind: "none" };
+export type GridAct = { kind: "apart" } | { kind: "key"; key: number } | { kind: "list" } | { kind: "apply" } | { kind: "move"; by: number } | { kind: "full" } | { kind: "back" } | { kind: "none" };
 
 /** What a key does on the grid. `columns` is how many scans a row holds now, for up and down. */
 export function keyAct(key: string, columns = 1): GridAct {
   const cols = Math.max(1, columns);
+  if (/^[1-9]$/u.test(key)) return { kind: "key", key: Number(key) };
   switch (key) {
     case " ":
       return { kind: "apart" };

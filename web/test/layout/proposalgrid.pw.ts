@@ -9,7 +9,8 @@
 // the page but the exceptions, the line says what was written and the job,
 // and the next page loads; a set-apart tile takes its value from the axis's
 // list, opened over it by 0 or its corner, and Accept writes the correction
-// (UX round 6, item 4); a second, quieter button takes the whole band after
+// (UX round 6, item 4), or from its number key or numbered chip over the
+// Accept, for every scan clicked apart at once; a second, quieter button takes the whole band after
 // a confirm, the line follows its job and then the re-sort, and the page is
 // read again (UX round 6, item 5); nothing scrolls sideways. SHOTS=<dir>
 // keeps a screenshot of each.
@@ -128,7 +129,7 @@ for (const vp of VIEWPORTS) {
     test("a set-apart tile takes its value: 0 opens the axis's list over it, the pick frames and names it, Accept writes the correction beside the rest", async ({ page }) => {
       await page.goto("/proposalgrid.html#review/proposals/12/body_part");
       await expect(page.locator(".pg-tile")).toHaveCount(500);
-      await expect(page.locator(".pg-foot .q-help")).toContainText("0other value");
+      await expect(page.locator(".pg-foot .q-help")).toContainText("1…5its value");
       const tile = page.locator('.pg-tile[data-stack="1003"]');
       await tile.click();
       await expect(tile.locator(".pg-corner")).toHaveText("apart");
@@ -182,6 +183,51 @@ for (const vp of VIEWPORTS) {
       expect(posted[0].except).toEqual([]);
       expect(posted[0].corrections).toEqual([{ stack: 1003, value: "brain" }]);
       await expect(page.locator(".pg-tile.corrected")).toHaveCount(0);
+    });
+
+    test("the axis's values sit on the number keys: numbered chips over the Accept, a key gives the clicked ones their value, the proposed value's puts one back, one Accept sends them", async ({ page }) => {
+      await page.goto("/proposalgrid.html#review/proposals/12/body_part");
+      await expect(page.locator(".pg-tile")).toHaveCount(500);
+      // the values in the pack's order, each chip in its value's colour, the page's value the filled one
+      const kinds = page.locator(".pg-foot .pg-kinds");
+      await expect(kinds.locator(".q-chip")).toHaveText(["1brain", "2brain-neck", "3chest", "4neck", "5spine"]);
+      await expect(kinds.locator(".q-chip.on")).toHaveText("4neck");
+      await expect(kinds.locator(".pg-kinds-for")).toHaveText("scan in focus");
+      for (const chip of await kinds.locator(".q-chip").all()) await expect(chip).toHaveAttribute("data-slot", /\d/u);
+      // the row is the foot's own line, within the window; on a laptop the Accept under it stays in view
+      const kb = (await kinds.boundingBox())!;
+      const accept = (await page.getByRole("button", { name: /^Accept \d/u }).boundingBox())!;
+      expect(kb.x).toBeGreaterThanOrEqual(0);
+      expect(kb.x + kb.width).toBeLessThanOrEqual(vp.width);
+      expect(kb.y + kb.height).toBeLessThanOrEqual(accept.y + 1);
+      if (vp.width >= 1000) expect(accept.y + accept.height).toBeLessThanOrEqual(vp.height);
+      // two clicked apart, one key: both take the value, its frame and its word
+      await page.locator('.pg-tile[data-stack="1003"]').click();
+      await page.locator('.pg-tile[data-stack="1005"]').click();
+      await expect(kinds.locator(".pg-kinds-for")).toHaveText("the 2 set apart");
+      await page.keyboard.press("1");
+      await expect(page.locator(".pg-tile.corrected")).toHaveCount(2);
+      await expect(page.locator('.pg-tile[data-stack="1005"] .pg-corner')).toHaveText("brain");
+      await expect(page.locator(".pg-tile.apart")).toHaveCount(0);
+      // a chip does what its key does, for a finger: another one clicked, then spine
+      const one = page.locator('.pg-tile[data-stack="1007"]');
+      await one.click();
+      await kinds.locator(".q-chip", { hasText: "spine" }).click();
+      await expect(one.locator(".pg-corner")).toHaveText("spine");
+      await expect(page.locator(".pg-foot .q-tally")).toContainText("3 corrected (2 brain, 1 spine)");
+      await noSidewaysScroll(page, vp.width);
+      await shot(page, `proposalgrid-keys-${vp.name}`);
+      // the key of the value the model proposed: the scan is back with the rest
+      await page.keyboard.press("4");
+      await expect(one).not.toHaveClass(/corrected|apart/u);
+      await expect(page.getByRole("button", { name: /^Accept 497 as neck · 2 corrected/u })).toBeVisible();
+      // Enter: one accept, the two corrections in its body
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".qgrid-said")).toContainText("Accepted 497 as neck and corrected 2 (2 brain) in your name");
+      const posted = await page.evaluate(() => (window as unknown as { posted: { except: number[]; corrections?: { stack: number; value: string }[] }[] }).posted);
+      expect(posted).toHaveLength(1);
+      expect(posted[0].except).toEqual([]);
+      expect(posted[0].corrections).toEqual([{ stack: 1003, value: "brain" }, { stack: 1005, value: "brain" }]);
     });
 
     test("the whole band is accepted in one move: the second button, its confirm, the line that follows the job then the re-sort, and the page read again", async ({ page }) => {

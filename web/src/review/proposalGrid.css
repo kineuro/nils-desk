@@ -70,6 +70,12 @@
 
 /* ------------------------------------------------------------ the foot */
 .pg-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.8rem; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
+/* the axis's values on the number keys: a row of its own over the Accept, each chip framed in its value's colour as
+   the tiles are; the value the page proposes is the filled one */
+.pg-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; flex-basis: 100%; min-width: 0; }
+.pg-kinds .pg-kinds-for { margin-right: 0.25rem; font-size: var(--n-text-size-small); }
+.pg-kinds .q-chip[data-slot]:not(.on) { border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: transparent; color: var(--n-text); }
+.pg-kinds .q-chip.on[data-slot] kbd { border-color: var(--vc); color: var(--n-text); }
 .pg-foot .q-help { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
 
 @media (max-width: 860px) {

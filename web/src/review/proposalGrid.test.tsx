@@ -43,6 +43,7 @@ import {
   bandServed,
   type BandSent,
   bandWords,
+  chooseKey,
   chooseValue,
   closeList,
   correctedWords,
@@ -53,7 +54,11 @@ import {
   gridHref,
   gridOf,
   gridServed,
+  KEYED,
   keyAct,
+  keyedScans,
+  keyedValues,
+  keyedWords,
   mayAccept,
   moved,
   openList,
@@ -207,7 +212,7 @@ describe("the grid's state", () => {
     // a value the axis does not take, or a scan not on the page, changes nothing
     expect(setCorrection(s, 1004, "liver")).toBe(s);
     expect(setCorrection(s, 77, "brain")).toBe(s);
-    expect(chooseValue(s, "neck")).toBe(s);
+    expect(chooseValue(s, "chest")).toBe(s);
     // with several set apart and the focus on one, 0 opens the list for all of them, and the pick gives each the value
     s = rangeApart(s, 1006);
     expect(s.listing).toBeNull();
@@ -215,8 +220,13 @@ describe("the grid's state", () => {
     expect(s.listing).toBe("apart");
     // the list is for the ones still without a value (and the focus): the scan corrected to brain already is not swept along
     expect(listedOf(s)).toEqual([1004, 1005, 1006]);
-    s = chooseValue(s, "neck");
-    expect(s.corrections).toEqual({ 1003: "brain", 1004: "neck", 1005: "neck", 1006: "neck" });
+    // the value the model proposed is no correction: the listed scans go back with the rest
+    const back = chooseValue(s, "neck");
+    expect(back.corrections).toEqual({ 1003: "brain" });
+    expect(back.apart).toEqual({ 1003: true });
+    expect(tally(back)).toMatchObject({ accept: 8, corrected: 1, apart: 0 });
+    s = chooseValue(s, "chest");
+    expect(s.corrections).toEqual({ 1003: "brain", 1004: "chest", 1005: "chest", 1006: "chest" });
     expect(tally(s)).toMatchObject({ accept: 5, corrected: 4, apart: 0 });
     // the corner of a scan not in focus opens the list for that scan alone
     expect(openList(s, 1008)).toMatchObject({ listing: 1008, focus: 1008, apart: { 1003: true, 1004: true, 1005: true, 1006: true, 1008: true } });
@@ -230,8 +240,50 @@ describe("the grid's state", () => {
     expect(tally(spaced)).toMatchObject({ corrected: 3, apart: 1 });
     expect(spaceApart(spaced, 1005).apart).not.toHaveProperty("1005");
     // the colours: the page's values by name, the filter's, the values corrected to, then the axis's other values
-    expect(paletteOf(s)).toEqual(["brain", "neck", "spine", "brain-neck", "chest"]);
+    expect(paletteOf(s)).toEqual(["brain", "neck", "spine", "chest", "brain-neck"]);
     expect(paletteOf(gridOf(page))).toEqual(["brain", "neck", "spine", "brain-neck", "chest"]);
+  });
+
+  it("puts the axis's values on the number keys: a key names the scans set apart and still without a value, or the scan in focus; the proposed value's key puts a scan back", () => {
+    let s = gridOf(page);
+    // the pack's order, so a key keeps its value on every page
+    expect(keyedValues(s)).toEqual(LEGAL);
+    expect(keyAct("3")).toEqual({ kind: "key", key: 3 });
+    // nothing set apart: the key names the scan in focus alone, and sets it apart with its value in one move
+    s = moved(s, 2);
+    expect(keyedScans(s)).toEqual([1002]);
+    expect(keyedWords(s)).toBe("scan in focus");
+    s = chooseKey(s, 1);
+    expect(s.corrections).toEqual({ 1002: "brain" });
+    expect(s.apart).toEqual({ 1002: true });
+    // several clicked apart: one key gives them all the value; the scan that has its value already is left alone
+    s = toggleApart(toggleApart(s, 1004), 1006);
+    expect(keyedScans(s)).toEqual([1004, 1006]);
+    expect(keyedWords(s)).toBe("the 2 set apart");
+    s = chooseKey(s, 3);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest", 1006: "chest" });
+    expect(tally(s)).toMatchObject({ accept: 6, corrected: 3, apart: 0 });
+    // again on the focus: its value changes, the others keep theirs
+    s = chooseKey(s, 5);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest", 1006: "spine" });
+    // the key of the value the model proposed: the scan goes back with the rest, no correction and not set apart
+    s = chooseKey(s, 4);
+    expect(s.corrections).toEqual({ 1002: "brain", 1004: "chest" });
+    expect(1006 in s.apart).toBe(false);
+    expect(tally(s)).toMatchObject({ accept: 7, corrected: 2, apart: 0 });
+    // on a scan as proposed, that key changes nothing; a key past the axis's values neither; an open list closes on a key
+    expect(chooseKey(s, 4)).toEqual(s);
+    expect(chooseKey(s, 6)).toBe(s);
+    expect(chooseKey(openList(moved(s, 1)), 2)).toMatchObject({ listing: null, corrections: { 1007: "brain-neck" } });
+    // the body: the corrected with their values, nothing in except
+    expect(acceptBody(s, { value: "neck", min: null, max: null, size: 10 })).toMatchObject({ except: [], corrections: [{ stack: 1002, value: "brain" }, { stack: 1004, value: "chest" }] });
+    // a longer axis keeps its first nine on the keys, the rest in the list
+    const long = gridOf(pageOf(gpage({ value: "neck", size: 10, legal: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "neck"] })));
+    expect(keyedValues(long)).toHaveLength(KEYED);
+    // an engine that says no values: no keys
+    const old = gridOf(pageOf(gpage({ value: "neck", size: 10, legal: null })));
+    expect(keyedValues(old)).toEqual([]);
+    expect(chooseKey(old, 1)).toBe(old);
   });
 
   it("offers no correction on an engine that says no values", () => {
@@ -244,7 +296,7 @@ describe("the grid's state", () => {
   });
 
   it("maps the keys and moves the focus within the page", () => {
-    expect([" ", "Enter", "f", "Escape", "x", "1", "0"].map((k) => keyAct(k).kind)).toEqual(["apart", "apply", "full", "back", "none", "none", "list"]);
+    expect([" ", "Enter", "f", "Escape", "x", "1", "9", "0"].map((k) => keyAct(k).kind)).toEqual(["apart", "apply", "full", "back", "none", "key", "key", "list"]);
     expect(keyAct("ArrowDown", 12)).toEqual({ kind: "move", by: 12 });
     expect(keyAct("ArrowUp", 12)).toEqual({ kind: "move", by: -12 });
     expect(keyAct("ArrowLeft")).toEqual({ kind: "move", by: -1 });
@@ -523,8 +575,8 @@ describe("the page", () => {
     await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
     await settle();
     await settle();
-    expect(host.querySelector(".pg-foot .q-help")?.textContent).toContain("0other value");
-    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("click a wrong one to set it apart, 0 gives it its value · 1 decided by a person, kept");
+    expect(host.querySelector(".pg-foot .q-help")?.textContent).toContain("1…5its value");
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("click a wrong one to set it apart, 1 to 5 gives it its value · 1 decided by a person, kept");
     // a click sets apart; 0 opens the axis's list over that tile, once
     const tile = host.querySelector('.pg-tile[data-stack="1003"]')!;
     await click(tile);
@@ -572,12 +624,50 @@ describe("the page", () => {
     expect(host.querySelectorAll(".pg-tile.corrected")).toHaveLength(0);
   });
 
+  it("names the wrong ones by number: the chips over the Accept carry the keys, a key gives the clicked ones their value, the proposed value's puts one back, and one Accept sends them all", async () => {
+    await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
+    await settle();
+    await settle();
+    // the axis's values as numbered chips in the pack's order, the page's value the filled one; no 0 while nine keys hold them all
+    const kinds = host.querySelector(".pg-foot .pg-kinds")!;
+    expect([...kinds.querySelectorAll(".q-chip")].map((b) => b.textContent)).toEqual(LEGAL.map((v, i) => `${i + 1}${v}`));
+    expect([...kinds.querySelectorAll(".q-chip.on")].map((b) => b.textContent)).toEqual(["4neck"]);
+    expect(kinds.querySelector(".q-other")).toBeNull();
+    expect(kinds.querySelector(".pg-kinds-for")?.textContent).toBe("scan in focus");
+    // two clicked apart, then one key: both take the value
+    await click(host.querySelector('.pg-tile[data-stack="1003"]')!);
+    await click(host.querySelector('.pg-tile[data-stack="1005"]')!);
+    expect(kinds.querySelector(".pg-kinds-for")?.textContent).toBe("the 2 set apart");
+    await press("1");
+    expect([...host.querySelectorAll(".pg-tile.corrected")].map((t) => t.getAttribute("data-stack"))).toEqual(["1003", "1005"]);
+    expect(host.querySelector('.pg-tile[data-stack="1005"] .pg-mark')?.textContent).toBe("brain");
+    expect(host.querySelector(".pg-foot .button")?.textContent).toBe("Accept 247 as neck · 2 corrected Enter");
+    // the arrows and a key, no click: the scan in focus takes its value
+    await press("ArrowRight");
+    await press("3");
+    expect(host.querySelector('.pg-tile[data-stack="1006"] .pg-mark')?.textContent).toBe("chest");
+    // a chip does what its key does; the proposed value's puts the scan back with the rest
+    await click([...kinds.querySelectorAll(".q-chip")].find((b) => b.textContent === "5spine")!);
+    expect(host.querySelector('.pg-tile[data-stack="1006"] .pg-mark')?.textContent).toBe("spine");
+    await press("4");
+    expect(host.querySelector('.pg-tile[data-stack="1006"]')?.className).not.toMatch(/corrected|apart/u);
+    // one more set apart with no value: it stays a proposal
+    await click(host.querySelector('.pg-tile[data-stack="1008"]')!);
+    expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("2 corrected (2 brain) · 1 set apart · 1 decided by a person, kept");
+    await press("Enter");
+    await settle();
+    await settle();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.body).toMatchObject({ value: "neck", except: [1008], corrections: [{ stack: 1003, value: "brain" }, { stack: 1005, value: "brain" }] });
+  });
+
   it("offers no correction on an engine before the axis's values: no 0, no corner button, no corrections sent", async () => {
     legal = null;
     await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
     await settle();
     await settle();
-    expect(host.querySelector(".pg-foot .q-help")?.textContent).not.toContain("other value");
+    expect(host.querySelector(".pg-foot .q-help")?.textContent).not.toContain("its value");
+    expect(host.querySelector(".pg-kinds")).toBeNull();
     expect(host.querySelector(".pg-foot .q-tally")?.textContent).toBe("click a wrong one to set it apart · 1 decided by a person, kept");
     const tile = host.querySelector('.pg-tile[data-stack="1003"]')!;
     await click(tile);
@@ -654,7 +744,8 @@ describe("the page", () => {
     expect(host.querySelectorAll(".pg-tile")).toHaveLength(1);
     expect(host.querySelector(".pg-state")?.textContent).toBe("page 1 of 1 · 1 neck");
     expect(host.querySelector(".pg-band-accept")).toBeNull();
-  });
+    // three seconds of the follow's own clock: longer than the default on a busy machine
+  }, 20_000);
 
   it("reads the page again when the band moved on, and offers no band without the door or when the band fits one page", async () => {
     await act(async () => root.render(<ProposalGrid caps={caps} model="12" axis="body_part" query={{ size: "250" }} />));
