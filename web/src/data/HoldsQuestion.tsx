@@ -95,7 +95,7 @@ export function HoldsQuestion(props: {
           <label className="radio-row">
             <input type="radio" name={`${name}-no-code`} checked={noCode === "code"} disabled={disabled} onChange={() => onNoCode("code")} />
             <span>
-              <b>Generate its subject code from the ID</b> <span className="meta">recommended</span>
+              <b>Generate its subject code from the ID</b>
             </span>
           </label>
           <label className="radio-row">

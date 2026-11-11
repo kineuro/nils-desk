@@ -295,7 +295,7 @@ for (const [device, width, height] of [
     await step.getByText("A hospital or study ID").click();
     await expect(step.getByLabel("Which hospital or study ID")).toHaveValue("study-id");
     // an ID with no subject code is asked beside it, in the words Add a dataset uses, the subject code made from the ID chosen
-    await expect(step.getByRole("radiogroup", { name: "An ID with no subject code" }).locator(".radio-row")).toHaveText(["Generate its subject code from the ID recommended", "Wait for a map"]);
+    await expect(step.getByRole("radiogroup", { name: "An ID with no subject code" }).locator(".radio-row")).toHaveText(["Generate its subject code from the ID", "Wait for a map"]);
     await expect(step.getByRole("radio", { name: /Generate its subject code/u })).toBeChecked();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     const asks = (await step.locator(".ps-asks").boundingBox())!;
