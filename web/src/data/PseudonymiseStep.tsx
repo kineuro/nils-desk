@@ -27,7 +27,7 @@ import { Icon } from "../ui/Icon";
 import { useKept, useReads } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { bringInBody, bringInName, jobs, packFor, type Dataset } from "./datasets";
-import { HoldsQuestion, useHoldsTypes } from "./HoldsQuestion";
+import { HoldsQuestion, useHoldsTypes, type NoCode } from "./HoldsQuestion";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { plainError, type Plain } from "./plain";
 import { policyKept } from "./policy";
@@ -422,6 +422,7 @@ function Asks({ caps, dataset: d, onSaved }: { caps: Capabilities; dataset: Data
   const types = useHoldsTypes(caps);
   const [holds, setHolds] = useState<Holds["holds"] | null>(null);
   const [type, setType] = useState("");
+  const [noCode, setNoCode] = useState<NoCode>("code");
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Plain | null>(null);
   const locked = needsWork(caps, "Saying what PatientID holds", [
@@ -438,7 +439,7 @@ function Asks({ caps, dataset: d, onSaved }: { caps: Capabilities; dataset: Data
   }
   // a hospital or study ID is one of the types the engine has, the first until another is picked; typed where it has none
   const named = type || types[0]?.name || "";
-  const patch = holds === null ? {} : holdsPatch(d, { holds, type: named });
+  const patch = holds === null ? {} : holdsPatch(d, { holds, type: named }, noCode);
   const ready = Object.keys(patch).length > 0 && !saving;
   const save = () => {
     setSaving(true);
@@ -454,7 +455,7 @@ function Asks({ caps, dataset: d, onSaved }: { caps: Capabilities; dataset: Data
   return (
     <div className="ps-asks">
       <div className="field">
-        <HoldsQuestion name={`holds-${d.id}`} holds={holds} type={named} types={types} disabled={saving} onHolds={setHolds} onType={setType} />
+        <HoldsQuestion name={`holds-${d.id}`} holds={holds} type={named} types={types} disabled={saving} noCode={noCode} onHolds={setHolds} onType={setType} onNoCode={setNoCode} />
       </div>
       <div className="ps-asks-save">
         <button type="button" className="button" disabled={!ready} onClick={save}>

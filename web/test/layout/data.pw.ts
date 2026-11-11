@@ -294,6 +294,9 @@ for (const [device, width, height] of [
     await expect(page.locator(".dp-card.on .dp-line")).toHaveText("Needs what PatientID holds");
     await step.getByText("A hospital or study ID").click();
     await expect(step.getByLabel("Which hospital or study ID")).toHaveValue("study-id");
+    // an ID with no subject code is asked beside it, in the words Add a dataset uses, the subject code made from the ID chosen
+    await expect(step.getByRole("radiogroup", { name: "An ID with no subject code" }).locator(".radio-row")).toHaveText(["Generate its subject code from the ID recommended", "Wait for a map"]);
+    await expect(step.getByRole("radio", { name: /Generate its subject code/u })).toBeChecked();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     const asks = (await step.locator(".ps-asks").boundingBox())!;
     const panel = (await step.boundingBox())!;
@@ -301,7 +304,7 @@ for (const [device, width, height] of [
     expect(asks.x + asks.width).toBeLessThanOrEqual(panel.x + panel.width + 1);
     await page.locator(".dp-detail").screenshot({ path: `test-results/data-pseudonymise-asks-${device}.png` });
     await step.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { saved?: unknown[] }).saved)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } }]);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { saved?: unknown[] }).saved)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "code" }]);
   });
 }
 

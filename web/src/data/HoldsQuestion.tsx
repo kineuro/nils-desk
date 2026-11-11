@@ -14,6 +14,9 @@ import { writable } from "./FinishDataset";
 import { typeLabel } from "./pseudonyms";
 import type { Holds } from "./pseudoStep";
 
+/** What becomes of a hospital or study ID no map names yet: its subject code made from the ID, or its files waiting for a map. */
+export type NoCode = "code" | "hold";
+
 /** The ID types an identified dataset's PatientID may hold, read once; none until the engine answers, or where it has no door for them. */
 export function useHoldsTypes(caps: Capabilities): LinkageType[] {
   const [types, setTypes] = useState<LinkageType[]>([]);
@@ -41,10 +44,13 @@ export function HoldsQuestion(props: {
   /** The types offered; with none, the type is typed. */
   types: LinkageType[];
   disabled?: boolean;
+  /** What becomes of a hospital or study ID no map names yet; the choice is offered when both this and onNoCode are given. */
+  noCode?: NoCode;
+  onNoCode?: (c: NoCode) => void;
   onHolds: (h: Holds["holds"]) => void;
   onType: (t: string) => void;
 }) {
-  const { name, holds, type, types, disabled = false, onHolds, onType } = props;
+  const { name, holds, type, types, disabled = false, noCode, onHolds, onType, onNoCode } = props;
   return (
     <>
       <span className="label">PatientID holds an identifying ID</span>
@@ -81,6 +87,23 @@ export function HoldsQuestion(props: {
               <input value={type} placeholder="study-id" aria-label="Which hospital or study ID" spellCheck={false} disabled={disabled} onChange={(e) => onType(e.target.value)} />
             </div>
           )}
+        </div>
+      )}
+      {holds === "type" && noCode !== undefined && onNoCode && (
+        <div className="choices" role="radiogroup" aria-label="An ID with no subject code">
+          <span className="meta">An ID with no subject code</span>
+          <label className="radio-row">
+            <input type="radio" name={`${name}-no-code`} checked={noCode === "code"} disabled={disabled} onChange={() => onNoCode("code")} />
+            <span>
+              <b>Generate its subject code from the ID</b> <span className="meta">recommended</span>
+            </span>
+          </label>
+          <label className="radio-row">
+            <input type="radio" name={`${name}-no-code`} checked={noCode === "hold"} disabled={disabled} onChange={() => onNoCode("hold")} />
+            <span>
+              <b>Wait for a map</b>
+            </span>
+          </label>
         </div>
       )}
     </>

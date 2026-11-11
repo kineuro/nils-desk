@@ -241,24 +241,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
               )}
               {!look.added && asksIdentity(look) && (
                 <div className="field">
-                  <HoldsQuestion name="dataset-holds" holds={holds} type={holdsType} types={types} disabled={adding !== null} onHolds={setHolds} onType={setHoldsType} />
-                  {holds === "type" && (
-                    <div className="choices" role="radiogroup" aria-label="An ID with no subject code">
-                      <span className="meta">An ID with no subject code</span>
-                      <label className="radio-row">
-                        <input type="radio" name="dataset-no-code" checked={noCode === "code"} disabled={adding !== null} onChange={() => setNoCode("code")} />
-                        <span>
-                          <b>Generate its subject code from the ID</b> <span className="meta">recommended</span>
-                        </span>
-                      </label>
-                      <label className="radio-row">
-                        <input type="radio" name="dataset-no-code" checked={noCode === "hold"} disabled={adding !== null} onChange={() => setNoCode("hold")} />
-                        <span>
-                          <b>Wait for a map</b>
-                        </span>
-                      </label>
-                    </div>
-                  )}
+                  <HoldsQuestion name="dataset-holds" holds={holds} type={holdsType} types={types} disabled={adding !== null} noCode={noCode} onHolds={setHolds} onType={setHoldsType} onNoCode={setNoCode} />
                 </div>
               )}
               {look.added && <p className="meta">Already a dataset.</p>}

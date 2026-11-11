@@ -602,12 +602,13 @@ export function holdsRule(holds: Holds["holds"] | null, type: string): IdentityR
  * gets one that reads PatientID as the kind said. The dialog offers a change
  * of kind only before anything is pseudonymised; a first answer at any time.
  */
-export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds): DatasetPatch {
+export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds, noCode?: "code" | "hold"): DatasetPatch {
   const type = h.holds === "same" ? SAME_EVERYWHERE : h.type.trim();
   if (type === "" || type === d.identity?.id_type) return {};
   if (!d.identity) {
     const identity = holdsRule(h.holds, h.type);
-    return identity ? { identity } : {};
+    // a hospital or study ID is asked what becomes of an ID no map names, in the same request as its rule
+    return identity ? { identity, ...(h.holds === "type" && noCode ? { unmapped: noCode } : {}) } : {};
   }
   const { code: _taken, ...kept } = d.identity;
   return { identity: { ...kept, id_type: type } };

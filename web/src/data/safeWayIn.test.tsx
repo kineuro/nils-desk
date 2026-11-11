@@ -425,9 +425,15 @@ describe("Sort the files", () => {
     expect([...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map((r) => r.checked)).toEqual([false, false]);
     expect(button(host, "Next")!.disabled).toBe(true);
     act(() => radio(host, "Identified").click());
+    // identified files are asked what PatientID holds, and move on no answer
+    expect(host.textContent).toContain("PatientID holds an identifying ID");
+    expect(button(host, "Next")!.disabled).toBe(true);
+    act(() => radio(host, "The same everywhere").click());
+    expect(button(host, "Next")!.disabled).toBe(false);
     act(() => button(host, "Next")!.click());
     await settle();
-    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals" });
+    const rule = { id_type: "personnummer", from: [{ field: "PatientID" }] };
+    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals", identity: rule });
     expect(host.querySelector("p.warn")).toBeNull();
     const asked = host.querySelector('[aria-label="Confirm the move"]')!;
     expect(asked.textContent).toContain("Move 2 entries into the identified folder?");
@@ -436,8 +442,40 @@ describe("Sort the files", () => {
     expect(onDone).not.toHaveBeenCalled();
     act(() => button(host, "Move them")!.click());
     await settle();
-    expect(e.of("PUT", "/api/places/4")[1].body).toEqual({ move_into: "originals", confirm_move: true });
+    expect(e.of("PUT", "/api/places/4")[1].body).toEqual({ move_into: "originals", confirm_move: true, identity: rule });
     expect(onDone).toHaveBeenCalledWith("ward-c: 2 moved.");
+  });
+
+  it("sends a hospital or study ID's type and what becomes of an ID no map names on both calls, and asks nothing of anonymised files or a dataset that has a rule", async () => {
+    const e = engine((c, nth) => (c.url === "/api/linkage/types" ? { status: 200, body: TYPES } : c.method === "PUT" && c.url === "/api/places/4" ? (nth === 1 ? { status: 409, body: ASKED } : { status: 200, body: { ...WARD_C, layout: { ...UNKNOWN, moved: { into: "derivatives/dcm-original", entries: 2 } } } }) : undefined));
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}", "GET /api/linkage/types"])} place={place} layout={UNKNOWN} onClose={() => undefined} onDone={() => undefined} />));
+    await settle();
+    act(() => radio(host, "Already anonymised").click());
+    expect(host.textContent).not.toContain("PatientID holds an identifying ID");
+    expect(button(host, "Next")!.disabled).toBe(false);
+    act(() => radio(host, "Identified").click());
+    act(() => radio(host, "A hospital or study ID").click());
+    await settle(2);
+    expect(host.querySelector('[aria-label="An ID with no subject code"]')).not.toBeNull();
+    act(() => radio(host, "Wait for a map").click());
+    act(() => button(host, "Next")!.click());
+    await settle();
+    act(() => button(host, "Move them")!.click());
+    await settle();
+    const rule = expect.objectContaining({ id_type: expect.any(String), from: [{ field: "PatientID" }] });
+    expect(e.of("PUT", "/api/places/4").map((c) => c.body)).toEqual([
+      { move_into: "originals", identity: rule, unmapped: "hold" },
+      { move_into: "originals", confirm_move: true, identity: rule, unmapped: "hold" },
+    ]);
+  });
+
+  it("asks nothing where the dataset already has a rule", () => {
+    engine(() => undefined);
+    const ruled = { ...place, dataset: { ...(place.dataset as object), identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } } as never };
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={ruled} layout={UNKNOWN} onClose={() => undefined} onDone={() => undefined} />));
+    act(() => radio(host, "Identified").click());
+    expect(host.textContent).not.toContain("PatientID holds an identifying ID");
+    expect(button(host, "Next")!.disabled).toBe(false);
   });
 
   it("names the entries only at the sensitive level, since a raw export's folder can be named after the patient", async () => {
@@ -448,6 +486,7 @@ describe("Sort the files", () => {
     expect(host.textContent).toContain("2 entries with DICOM. What are they?");
     expect(host.textContent).not.toContain("Which entries");
     act(() => radio(host, "Identified").click());
+    act(() => radio(host, "The same everywhere").click());
     act(() => button(host, "Next")!.click());
     await settle();
     const asked = host.querySelector('[aria-label="Confirm the move"]')!;
@@ -464,13 +503,14 @@ describe("Sort the files", () => {
     expect(host.textContent).toContain("2 entries with DICOM. What are they?");
     expect(host.textContent).not.toContain("Which entries");
     act(() => radio(host, "Identified").click());
+    act(() => radio(host, "The same everywhere").click());
     act(() => button(host, "Next")!.click());
     await settle();
     const asked = host.querySelector('[aria-label="Confirm the move"]')!;
     expect(asked.querySelectorAll("li")).toHaveLength(0);
     expect(host.textContent).not.toContain("Aaa-0000");
     // what is sent names the tree, never an entry
-    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals" });
+    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
   });
 
   it("says why it cannot look inside the folder, never looking for good", async () => {
@@ -527,6 +567,25 @@ describe("Set the IDs", () => {
     expect(onDone).toHaveBeenCalledWith("ward-b: IDs set.");
     // its words sit behind a "?", never as paragraphs
     expect(host.querySelectorAll(".hint").length).toBeGreaterThan(0);
+  });
+
+  it("says the engine's refusal for a dataset with no identity rule as one short line, the long words behind the question mark", async () => {
+    const long = "ward-b holds identified files (derivatives/dcm-original) and nothing says what PatientID holds. Give an identity rule (--identity FILE, or identity in the body). Nothing was written";
+    engine((c) => {
+      if (c.url === "/api/linkage/types") return { status: 200, body: TYPES };
+      if (c.method === "PUT" && c.url === "/api/places/3") return { status: 400, body: { error: long } };
+      return undefined;
+    });
+    act(() =>
+      root.render(<SetIdsDialog caps={caps7a(["GET /api/linkage/types", "PUT /api/places/{id}"])} place={{ id: 3, name: "ward-b", path: "/srv/in/ward-b", dataset: WARD_B.dataset as never }} layout={ANONYMISED} onClose={() => undefined} onDone={() => undefined} />),
+    );
+    await settle();
+    act(() => radio(host, "Made from the ID").click());
+    act(() => button(host, "Save")!.click());
+    await settle();
+    const said = host.querySelector("p.warn")!;
+    expect(said.textContent).toContain("Say what PatientID holds first.");
+    expect(said.querySelector(".hint")?.getAttribute("title")).toBe(long);
   });
 });
 

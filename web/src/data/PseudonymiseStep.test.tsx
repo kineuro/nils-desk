@@ -540,9 +540,30 @@ describe("the pseudonymise step, in the dataset", () => {
       button(panel, "Save")!.click();
     });
     await settle(6);
-    expect(e.of("PUT", "/api/places/9").map((c) => c.body)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } }]);
+    expect(e.of("PUT", "/api/places/9").map((c) => c.body)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "code" }]);
     expect(e.of("POST", "/api/jobs")).toHaveLength(0);
     expect(text()).toContain("study-identified: rules saved.");
+  });
+
+  it("offers a hospital or study ID the choice for an ID with no subject code, as Add a dataset does, and sends it in the same request as the rule", async () => {
+    const unruled = dataset({ identity: null, held: { files: 0, identifiers: 0 } });
+    const e = await page(unruled, { held: 0 }, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined), { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    const panel = host.querySelector(".ps-step")!;
+    // an ID that is the same everywhere needs no map, so the choice is not asked
+    act(() => radio(panel, "The same everywhere").click());
+    expect(panel.querySelector('[aria-label="An ID with no subject code"]')).toBeNull();
+    act(() => radio(panel, "A hospital or study ID").click());
+    await settle(2);
+    const choice = panel.querySelector('[aria-label="An ID with no subject code"]')!;
+    expect(choice.querySelector(".meta")?.textContent).toBe("An ID with no subject code");
+    expect([...choice.querySelectorAll(".radio-row")].map((r) => r.textContent)).toEqual(["Generate its subject code from the ID recommended", "Wait for a map"]);
+    expect([...choice.querySelectorAll<HTMLInputElement>("input")].map((i) => i.checked)).toEqual([true, false]);
+    act(() => radio(choice, "Wait for a map").click());
+    await act(async () => {
+      button(panel, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9").map((c) => c.body)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "hold" }]);
   });
 
   it("saves an ID that is the same everywhere for a dataset with no rule, and says the engine's refusal where it will not take it", async () => {
