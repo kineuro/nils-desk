@@ -556,7 +556,7 @@ describe("the pseudonymise step, in the dataset", () => {
     await settle(2);
     const choice = panel.querySelector('[aria-label="An ID with no subject code"]')!;
     expect(choice.querySelector(".meta")?.textContent).toBe("An ID with no subject code");
-    expect([...choice.querySelectorAll(".radio-row")].map((r) => r.textContent)).toEqual(["Generate its subject code from the ID recommended", "Wait for a map"]);
+    expect([...choice.querySelectorAll(".radio-row")].map((r) => r.textContent)).toEqual(["Generate its subject code from the ID", "Wait for a map"]);
     expect([...choice.querySelectorAll<HTMLInputElement>("input")].map((i) => i.checked)).toEqual([true, false]);
     act(() => radio(choice, "Wait for a map").click());
     await act(async () => {
