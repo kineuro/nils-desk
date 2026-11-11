@@ -156,6 +156,38 @@ export interface Release extends ReleaseRow {
    * releases door does not carry it.
    */
   session_scheme?: { naming?: string; window_days?: number } | string | null;
+  /** The ID types the release named its subjects by, in the order they were tried; null or absent where every subject kept its subject code. */
+  name_by?: string[] | null;
+  /** How many subjects each type named, how many kept their subject code, and how many a person chose the ID for. Never a name. */
+  names?: { types?: { type: string; subjects: number }[]; code?: number; chosen?: number } | null;
+}
+
+/** A subject that holds several IDs of the type that would name it: `values` only for a person who may see IDs. */
+export interface NameChoice {
+  subject: string;
+  type: string;
+  count: number;
+  values?: string[];
+}
+
+/** A name several subjects would share once cleaned: `name` only for a person who may see IDs; a null type is a subject named by its subject code. */
+export interface NameCollision {
+  name?: string;
+  subjects: { subject: string; type: string | null }[];
+}
+
+/** What a release naming its subjects by ID types would name, rehearsed: nothing is written. */
+export interface NamesPlan {
+  by: string[];
+  subjects: number;
+  types: { type: string; identifying?: boolean; subjects: number }[];
+  code: number;
+  chosen?: number;
+  passed_over?: number;
+  needs_choice: NameChoice[];
+  collisions: NameCollision[];
+  values: "shown" | "withheld";
+  ready: boolean;
 }
 
 /** What a selection reaches, from the select door, without anything written. */
@@ -180,6 +212,8 @@ export const releases = {
   list: (limit = 50) => door<{ count: number; releases: Release[] }>("GET", `/api/releases?limit=${limit}`),
   make: (body: Json) => door<{ job: number; state: string; command?: string[] }>("POST", "/api/releases", body),
   select: (body: Json) => door<Selected>("POST", "/api/select", body),
+  /** The rehearsal of a release's names, of the body the release would send; null where it names by no ID type. */
+  names: (body: Json) => door<{ names: NamesPlan | null }>("POST", "/api/releases/names", body).then((r) => r.names ?? null),
 };
 
 export type Tone = "brand" | "caution" | "ok" | "neutral";

@@ -10,11 +10,13 @@ import { Hint } from "../ui/Hint";
 import { SchemePicker, SchemesPage } from "./Schemes";
 import { schemeActs } from "./schemes";
 import { countText } from "../ask/held";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { desk, results, type DeskRecord, type HandleRow } from "../ask/client";
+import { desk, DoorError, results, type DeskRecord, type HandleRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { cohorts, leavingLines, policyWords, reachesWords, releases, releaseSessionNaming, sessionsPhrase, suggestedName, type Cohort, type CohortDetail, type Release, type Selected } from "../data/cohorts";
+import { cohorts, leavingLines, policyWords, reachesWords, releases, releaseSessionNaming, sessionsPhrase, suggestedName, type Cohort, type CohortDetail, type NameChoice, type NamesPlan, type Release, type Selected } from "../data/cohorts";
+import { knownError, type Plain } from "../data/plain";
+import { linkage } from "../data/pseudonyms";
 import { DATES_KEPT, sources, whenWords, type Source } from "../data/sources";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -28,8 +30,10 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { DATASETS_OWN, NAMES_HINT, expertOffered, overrideNote, releaseBody, type Expert, type ReleaseSource } from "./release";
+import { DATASETS_OWN, NAMES_HINT, expertOffered, overrideNote, rehearsalBody, releaseBody, type Expert, type ReleaseForm, type ReleaseSource } from "./release";
 import { ReleaseExpert } from "./ReleaseExpert";
+import { NameBy, NamesSaid, useRehearsal } from "./ReleaseNames";
+import { asked, NAMES_DOOR, namedWords, nameTypes, planNeeds, type NameType } from "./releaseNames";
 import { HandoversDialog } from "./HandoverPassword";
 import { ownPasswords } from "./handovers";
 import { HandoverDialog, QueuedWords, WithdrawDialog, type Queued } from "./ReleaseActs";
@@ -207,52 +211,64 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
                 const policy = policyWords(r);
                 // a row keeps the policy it was released under: one from before record 38 S3 may read shifted or cut to the year, and numbered its sessions in date order
                 const naming = releaseSessionNaming(r);
+                // what named its subjects, where an ID type did: nothing for a release whose subjects kept their subject codes
+                const named = namedWords(r);
                 return (
-                  <tr key={r.id} className={r.withdrawn_at ? "withdrawn" : undefined}>
-                    <td>
-                      <b className="path">{r.name}</b>
-                    </td>
-                    <td className="num">{r.version}</td>
-                    <td>
-                      {r.layout ?? ""}
-                      {r.naming === "minimal" && <span className="meta">minimal names</span>}
-                    </td>
-                    <td>{policy.dates}</td>
-                    <td>{policy.uids}</td>
-                    <td className="num">{r.subjects !== null ? n(r.subjects) : ""}</td>
-                    <td className="num">
-                      {typeof r.sessions === "number" ? n(r.sessions) : ""}
-                      {naming && <span className="meta">{naming}</span>}
-                    </td>
-                    <td className="nowrap">{whenWords(r.started_at, today)}</td>
-                    <td>{r.actor ?? ""}</td>
-                    <td>
-                      {r.handed_over && lookable ? (
-                        <button type="button" className="button quiet small" aria-label={`Handovers of ${r.name} version ${r.version}`} onClick={() => setLooking(r)}>
-                          {whenWords(r.handed_over, today)}
-                        </button>
-                      ) : r.handed_over ? (
-                        whenWords(r.handed_over, today)
-                      ) : (
-                        "not yet"
-                      )}
-                    </td>
-                    <td>{r.withdrawn_at ? [whenWords(r.withdrawn_at, today), r.withdrawn_by, r.withdrawn_why].filter(Boolean).join(" · ") : ""}</td>
-                    {acts && (
-                      <td className="acts release-acts">
-                        {handsOver && newest.has(r.id) && (
-                          <button type="button" className="button quiet small" aria-label={`Hand over ${r.name}`} onClick={() => onHandover?.(r)}>
-                            Hand over
+                  <Fragment key={r.id}>
+                    <tr className={[r.withdrawn_at && "withdrawn", named && "named"].filter(Boolean).join(" ") || undefined}>
+                      <td>
+                        <b className="path">{r.name}</b>
+                      </td>
+                      <td className="num">{r.version}</td>
+                      <td>
+                        {r.layout ?? ""}
+                        {r.naming === "minimal" && <span className="meta">minimal names</span>}
+                      </td>
+                      <td>{policy.dates}</td>
+                      <td>{policy.uids}</td>
+                      <td className="num">{r.subjects !== null ? n(r.subjects) : ""}</td>
+                      <td className="num">
+                        {typeof r.sessions === "number" ? n(r.sessions) : ""}
+                        {naming && <span className="meta">{naming}</span>}
+                      </td>
+                      <td className="nowrap">{whenWords(r.started_at, today)}</td>
+                      <td>{r.actor ?? ""}</td>
+                      <td>
+                        {r.handed_over && lookable ? (
+                          <button type="button" className="button quiet small" aria-label={`Handovers of ${r.name} version ${r.version}`} onClick={() => setLooking(r)}>
+                            {whenWords(r.handed_over, today)}
                           </button>
-                        )}
-                        {withdraws && !r.withdrawn_at && (
-                          <button type="button" className="button quiet small" aria-label={`Withdraw ${r.name} version ${r.version}`} onClick={() => onWithdraw?.(r)}>
-                            Withdraw
-                          </button>
+                        ) : r.handed_over ? (
+                          whenWords(r.handed_over, today)
+                        ) : (
+                          "not yet"
                         )}
                       </td>
+                      <td>{r.withdrawn_at ? [whenWords(r.withdrawn_at, today), r.withdrawn_by, r.withdrawn_why].filter(Boolean).join(" · ") : ""}</td>
+                      {acts && (
+                        <td className="acts release-acts">
+                          {handsOver && newest.has(r.id) && (
+                            <button type="button" className="button quiet small" aria-label={`Hand over ${r.name}`} onClick={() => onHandover?.(r)}>
+                              Hand over
+                            </button>
+                          )}
+                          {withdraws && !r.withdrawn_at && (
+                            <button type="button" className="button quiet small" aria-label={`Withdraw ${r.name} version ${r.version}`} onClick={() => onWithdraw?.(r)}>
+                              Withdraw
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                    {named && (
+                      // a row of its own under the release's, the table's whole width: the line costs the columns nothing
+                      <tr className={r.withdrawn_at ? "named-under withdrawn" : "named-under"}>
+                        <td colSpan={acts ? 12 : 11} className="meta named-by">
+                          subjects named by {named}
+                        </td>
+                      </tr>
                     )}
-                  </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -302,7 +318,14 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const [out, setOut] = useState("");
   const [selected, setSelected] = useState<Selected | null>(null);
   const [busy, setBusy] = useState<{ phase: string; since: number } | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | Plain | null>(null);
+  // the subjects' names: the ID types tried in order, none until a person adds one, and the ID chosen for a subject holding several.
+  // Offered only by an engine with the rehearsal's door, of the types it says keep a value
+  const namesServed = served(caps, NAMES_DOOR);
+  const [idTypes, setIdTypes] = useState<NameType[]>([]);
+  const [nameBy, setNameBy] = useState<string[]>([]);
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  const [choiceRows, setChoiceRows] = useState<NameChoice[]>([]);
   const places = useKept(placesKept);
   const epoch = caps.engine?.registry.epoch ?? 0;
 
@@ -325,7 +348,13 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
         () => setSrcs([]),
       );
     else setSrcs([]);
-  }, [caps, epoch]);
+    if (namesServed && served(caps, "GET /api/linkage/types"))
+      linkage.types().then(
+        (d) => setIdTypes(nameTypes(d.types)),
+        () => setIdTypes([]),
+      );
+    else setIdTypes([]);
+  }, [caps, epoch, namesServed]);
 
   useEffect(() => {
     setDetail(null);
@@ -348,7 +377,22 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const place: Place | null = exports.find((p) => p.id === placeId) ?? exports[0] ?? null;
   const written = place ? `${place.path.replace(/\/+$/, "")}/${name}` : out.trim();
   const src: ReleaseSource = of === "cohort" ? { kind: "hand", cohorts: cohort ? [cohort] : [] } : { kind: "handle", handle: card?.handle };
-  const built = releaseBody(src, { name, out: written, layout, naming, scheme_name: scheme || undefined, uids, expert, offered }, []);
+  const form: ReleaseForm = { name, out: written, layout, naming, scheme_name: scheme || undefined, uids, expert, offered, name_by: nameBy, name_choices: choices };
+  const built = releaseBody(src, form, []);
+  const names = useRehearsal(rehearsalBody(src, form, []));
+  const namesPlan = names.fresh ? names.plan : null;
+  // a choice is of one selection named one way: another list of types, or other subjects, and it is asked again
+  const namedOf = `${nameBy.join(",")}|${of}|${cohort}|${handle ?? ""}`;
+  useEffect(() => {
+    setChoices({});
+    setChoiceRows([]);
+  }, [namedOf]);
+  useEffect(() => {
+    if (namesPlan) setChoiceRows((was) => asked(was, choices, namesPlan));
+  }, [namesPlan]); // eslint-disable-line react-hooks/exhaustive-deps
+  // with a type chosen, nothing is released until the rehearsal of the form as it stands says every subject has one name of its own
+  const needs = namesPlan ? planNeeds(namesPlan) : null;
+  const namesStop = nameBy.length === 0 ? null : names.failed ? "The names were refused." : !namesPlan ? "Reading the names." : needs !== null ? `Needs ${needs}.` : null;
   const lines = srcs ? leavingLines(srcs, of === "cohort" ? (detail?.sources_holding ?? null) : null) : [];
   const override = overrideNote(uids);
   const waiting = of === "cohort" ? (detail?.waiting ?? list?.find((c) => c.name === cohort)?.waiting ?? 0) : 0;
@@ -372,7 +416,10 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
       .then((j) => onDone(`Release ${name} is queued as job ${j.job}: ${built.summary}, written to ${written}.`))
       .catch((e: Error) => {
         setBusy(null);
-        setFailed(e.message);
+        // the door's own plan of the names it could not give stands in for the rehearsal's
+        const plan = e instanceof DoorError && e.status === 409 ? (e.body.names as NamesPlan | null | undefined) : null;
+        if (plan && Array.isArray(plan.needs_choice) && Array.isArray(plan.collisions)) names.put(plan);
+        setFailed((nameBy.length > 0 ? knownError(e) : null) ?? e.message);
       });
   };
 
@@ -386,7 +433,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
       onClose={onClose}
       foot={
         <div className="row actions">
-          <span className="meta grow">{built.ok ? "Select first says what it reaches without writing anything." : `Needs ${built.why}.`}</span>
+          <span className="meta grow">{!built.ok ? `Needs ${built.why}.` : namesStop !== null ? namesStop : "Select first says what it reaches without writing anything."}</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -395,7 +442,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
               Select first
             </button>
           )}
-          <button type="button" className="button" disabled={busy !== null || !built.ok} onClick={release}>
+          <button type="button" className="button" disabled={busy !== null || !built.ok || namesStop !== null} onClick={release}>
             Release
           </button>
         </div>
@@ -506,6 +553,15 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
               </dd>
             </div>
           )}
+          {namesServed && idTypes.length > 0 && (
+            <div className="facts-pair">
+              <dt>name subjects by</dt>
+              <dd className="name-subjects">
+                <NameBy types={idTypes} by={nameBy} onChange={setNameBy} />
+                {nameBy.length > 0 && <NamesSaid names={names} rows={choiceRows} chosen={choices} onChoose={(subject, value) => setChoices((was) => ({ ...was, [subject]: value }))} />}
+              </dd>
+            </div>
+          )}
           <div className="facts-pair">
             <dt>override</dt>
             <dd>
@@ -559,7 +615,15 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
       )}
       {busy && <Wait phase={busy.phase} since={busy.since} />}
       {selected && <p className="ok-words">{reachesWords(selected, sizeWords)}</p>}
-      {failed && <p className="warn">{failed}</p>}
+      {failed !== null &&
+        (typeof failed === "string" ? (
+          <p className="warn">{failed}</p>
+        ) : (
+          <p className="warn">
+            {failed.words}
+            <Hint text={failed.detail} />
+          </p>
+        ))}
     </Dialog>
   );
 }

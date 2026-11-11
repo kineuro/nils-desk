@@ -459,13 +459,19 @@ export function roleWord(role: string): string {
  * alias is kept, so what this menu shows by it is the alias.
  */
 export function showOptions(idTypes: Facet[]): { value: string; label: string }[] {
-  const words: Record<string, string> = { "study-id": "Study ID", "subject-code": "Alias", "patient-id": "Patient ID" };
   return [
-    { value: "code", label: "Subject code" },
-    ...idTypes
-      .filter((t) => t.name !== "study-instance-uid" && t.subjects > 0)
-      .map((t) => ({ value: t.name, label: words[t.name] ?? t.name.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase()) })),
+    { value: "code", label: SUBJECT_CODE_WORDS },
+    ...idTypes.filter((t) => t.name !== "study-instance-uid" && t.subjects > 0).map((t) => ({ value: t.name, label: idTypeWords(t.name) })),
   ];
+}
+
+/** A subject's own subject code, as a menu of what subjects go by says it. */
+export const SUBJECT_CODE_WORDS = "Subject code";
+
+/** An ID type's name as a menu spells it: `study-id` is Study ID, and a type the desk has no words for reads as its name does. */
+export function idTypeWords(name: string): string {
+  const words: Record<string, string> = { "study-id": "Study ID", "subject-code": "Alias", "patient-id": "Patient ID" };
+  return words[name] ?? name.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase());
 }
 
 /** A subject card's facts line: where in the body, by which maker, and a main scan the dataset picks that it lacks. */

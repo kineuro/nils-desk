@@ -1372,6 +1372,24 @@ table.thin.releases tr.withdrawn td b { text-decoration: line-through; text-deco
 dl.facts .input.scheme { min-height: 1.75rem; font-size: var(--n-text-size-small); }
 dl.facts .row.wrap { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
 dl.facts .row.wrap .input { min-height: 1.75rem; }
+/* New release's "name subjects by": the ID types as tags in the order they are tried, each with its own move and remove buttons, the
+   subject code last; under them what the rehearsal says, one line a thing, and a row for each subject that needs an ID chosen */
+dl.facts dd.name-subjects { display: grid; gap: 0.3rem; justify-items: start; }
+.name-by-order { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.45rem; margin: 0; padding: 0; list-style: none; }
+.name-by-order li { display: inline-flex; align-items: center; gap: 0.45rem; }
+.name-by-order .tag { min-height: 1.75rem; }
+.name-by-type { gap: 0.1rem; padding-right: 0.1rem; }
+.name-by-type .icon-button { width: 1.5rem; height: 1.5rem; color: inherit; }
+.name-by-type .icon-button:disabled { color: var(--n-text-faint); opacity: 0.55; }
+.name-by-type .icon-button:focus-visible { outline: 2px solid var(--n-brand-line); outline-offset: -2px; }
+.name-plan { font-variant-numeric: tabular-nums; }
+.name-plan[aria-busy="true"] { color: var(--n-text-faint); }
+.name-choices, .name-shared { display: grid; gap: 0.25rem; width: 100%; max-height: 11.5rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; font-size: var(--n-text-size-small); }
+.name-choices li { display: grid; grid-template-columns: minmax(0, max-content) max-content minmax(0, 1fr); align-items: center; gap: 0.6rem; }
+.name-choices .input { justify-self: start; min-height: 1.75rem; max-width: 100%; }
+.name-shared li { display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; }
+table.thin.releases tr.named td { padding-bottom: 0.1rem; border-bottom: 0; }
+table.thin.releases tr.named-under td { padding-top: 0; }
 .choices > .input { margin-left: calc(16px + 0.55rem); }
 @media (max-width: 1100px) {
   .cpage { grid-template-columns: minmax(0, 1fr); }

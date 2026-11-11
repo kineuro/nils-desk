@@ -15,6 +15,21 @@ export interface Plain {
 
 /** The refusals the desk knows, first match wins: what the engine says, and the line shown. */
 const KNOWN: { test: RegExp; words: string }[] = [
+  // a release naming its subjects by ID types, refused at the release door or its rehearsal: each begins with the engine's own
+  // opening, so none of the lines below can take it
+  { test: /^the release names its subjects by .* cannot name them all/i, words: "Some subjects cannot be named yet." },
+  { test: /^naming subjects by an ID type that identifies a person/i, words: "Naming by this ID type needs someone who may see IDs." },
+  { test: /^name by [^:]+: .*never kept, not even sealed/i, words: "This ID type keeps no ID, so it names no subject." },
+  { test: /^name by [^:]+: no ID type is named so/i, words: "There is no such ID type." },
+  { test: /^name by [^:]+: no subject holds a kept value/i, words: "No subject holds an ID of this type." },
+  { test: /^name by [^:]+: the type is in the list twice/i, words: "An ID type is in the list twice." },
+  { test: /^name_by is a list of ID type names/i, words: "The ID types to name by could not be read." },
+  { test: /^name_choices says which value names a subject, and the release names by no ID type/i, words: "An ID was chosen and no ID type names the subjects." },
+  { test: /^name_choices is a list of/i, words: "The chosen IDs could not be read." },
+  { test: /^the choice for [^:]+: the release's selection holds no subject with that code/i, words: "An ID was chosen for a subject this release does not hold." },
+  { test: /^the choice for [^:]+: two different values were given/i, words: "Two IDs were chosen for one subject." },
+  { test: /^the choice for [^:]+: the subject holds no such value/i, words: "A chosen ID is not one the subject holds. Choose again." },
+  { test: /^the choice for [^:]+: .*Leave the choice out/i, words: "A subject needs no choice any more. Choose again." },
   // an identified dataset with no identity rule, refused at its declaration, its pseudonymise run or its bring-in: before the lines
   // below, since the engine's words may name PatientID as well
   { test: /\b(no|without an?|needs an?|give (it |the dataset )?an?|set an?|missing) identity rule\b|identity rule (is )?(missing|not set|not given)/i, words: "Say what PatientID holds first." },
@@ -36,6 +51,13 @@ const STEP_REFUSED: Record<string, (step: string) => string> = {
   // engine 2026-11-06: a run over the scans without its answer, where none is without it
   none_without: (step) => (step === "sorted" ? "Every scan is sorted already." : "Every scan has its answer already."),
 };
+
+/** A refusal the desk has a line for, or null: for a page that says the engine's own words wherever it has none. */
+export function knownError(e: unknown): Plain | null {
+  const detail = messageOf(e);
+  const known = KNOWN.find((k) => k.test.test(detail));
+  return known ? { words: known.words, detail } : null;
+}
 
 /** A refusal, an error or the engine's words, as the Data page says it; `otherwise` where the desk does not know it. */
 export function plainError(e: unknown, otherwise = "That did not work."): Plain {

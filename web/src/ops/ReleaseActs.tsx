@@ -19,6 +19,7 @@ import { ops } from "./client";
 import { ownPasswords, plainRefusal, typedRefusal, typeRefusal, handovers, type Closing } from "./handovers";
 import { jobLogHref, logsOffered } from "./logs";
 import { exchangePlaces, handoverOut, keyRefusal, passwordCommand, withdrawCommand, withdrawRefusal } from "./releaseActs";
+import { NamedBy } from "./ReleaseNames";
 
 /** What a queued job came to, said on the page, with a link to its log where the person may read it. */
 export interface Queued {
@@ -132,6 +133,7 @@ function HandoverOwn({ caps, release: r, onClose, onDone }: { caps: Capabilities
       }
     >
       <p className="meta">Its newest version is packed into archives, in an exchange place apart from the tree.</p>
+      <NamedBy release={r} />
       <Into ids={ids} at={at} />
       <label className="choice" htmlFor={`${ids}-encrypt`}>
         <input id={`${ids}-encrypt`} type="checkbox" checked={encrypt} onChange={(e) => setEncrypt(e.target.checked)} />
@@ -228,6 +230,7 @@ function HandoverByKey({ caps, release: r, onClose, onDone }: { caps: Capabiliti
       }
     >
       <p className="meta">Its newest version is packed into encrypted archives, in an exchange place apart from the tree.</p>
+      <NamedBy release={r} />
       <Into ids={ids} at={at} />
       <div className="field">
         <label className="label" htmlFor={`${ids}-key`}>
@@ -290,6 +293,7 @@ export function WithdrawDialog({ release: r, onClose, onDone }: { release: Relea
       }
     >
       <p className="meta">A release is never removed. Its files stay where they were written; whoever uses them reads that it was withdrawn and why.</p>
+      <NamedBy release={r} />
       <div className="field">
         <label className="label" htmlFor={`${ids}-why`}>
           Why
