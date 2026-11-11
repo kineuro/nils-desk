@@ -248,8 +248,19 @@ describe("the rules", () => {
     expect(open).not.toContain('disabled="">The same everywhere (personnummer, national ID)</button>');
     const locked = rules({ dataset: named, written: 120 });
     expect(locked).toContain('disabled="">The same everywhere (personnummer, national ID)</button>');
-    // a dataset whose rule names no kind is not asked
-    expect(rules({ dataset: { ...incoming, identity: null } })).not.toContain(">PatientID holds</span>");
+    // an engine that says nothing of the rule is not asked
+    expect(rules({ dataset: { ...incoming, identity: undefined } })).not.toContain(">PatientID holds</span>");
+  });
+
+  it("asks a dataset with originals and no rule what PatientID holds, whatever was pseudonymised, with neither kind chosen (2026-11-11)", () => {
+    const unruled = { ...incoming, identity: null };
+    const open = rules({ dataset: unruled, written: 120 });
+    expect(open).toContain(">PatientID holds</span>");
+    expect(open).toContain('aria-pressed="false">The same everywhere (personnummer, national ID)</button>');
+    expect(open).toContain('aria-pressed="false">A hospital or study ID</button>');
+    expect(open).not.toContain('disabled="">The same everywhere (personnummer, national ID)</button>');
+    // what the copy's PatientID gets stays as it was written
+    expect(open).toContain("Changed only before anything is pseudonymised.");
   });
 
   it("keeps what PatientID gets once anything is pseudonymised, and says so behind its question mark", () => {

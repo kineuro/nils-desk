@@ -19,6 +19,9 @@ import { messageOf } from "../settings/common";
 import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
+import { HoldsQuestion, useHoldsTypes, type NoCode } from "./HoldsQuestion";
+import { plainError } from "./plain";
+import { holdsRule, type Holds } from "./pseudoStep";
 import { linkage, look as lookDoor, places as placesDoor, type DatasetFields, type FolderNaming, type Layout, type LinkageType, type PlaceAnswer, type Subjects } from "./datasets";
 import { dicomNamed, moveAskedOf, namesShown, patientIdOf, questionWords, stateOf, type MoveAsked } from "./layout";
 import { RESERVE_TYPE, SAME_EVERYWHERE, typeLabel } from "./pseudonyms";
@@ -26,7 +29,7 @@ import { RESERVE_TYPE, SAME_EVERYWHERE, typeLabel } from "./pseudonyms";
 /** A dataset place as the dialogs need it. */
 export type Finishing = Pick<Place, "id" | "name" | "path"> & { dataset?: Place["dataset"]; not_read?: string | null };
 
-type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "failed"; why: string };
+type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "failed"; why: string; detail?: string };
 
 /**
  * The hospital or study IDs a pseudonymised file's PatientID may hold:
@@ -90,6 +93,15 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
   const [layout, setLayout] = useState<Layout | null>(props.layout);
   const [into, setInto] = useState<"originals" | "anon" | null>(null);
   const [asked, setAsked] = useState<MoveAsked | null>(null);
+  // what PatientID holds, asked when the files are identified and no rule says it yet: the engine refuses them without
+  const ruled = Boolean((place.dataset as { identity?: unknown } | undefined)?.identity);
+  const types = useHoldsTypes(caps);
+  const [holds, setHolds] = useState<Holds["holds"] | null>(null);
+  const [holdsType, setHoldsType] = useState("");
+  const [noCode, setNoCode] = useState<NoCode>("code");
+  const namedType = holdsType || types[0]?.name || "";
+  const identity = into === "originals" && !ruled ? holdsRule(holds, namedType) : null;
+  const unanswered = into === "originals" && !ruled && identity === null;
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const working = act.kind === "working";
   /** Why the folder could not be looked inside: said, never left as looking. */
@@ -120,7 +132,8 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
   const move = (confirmed: boolean) => {
     if (into === null) return;
     setAct({ kind: "working", phase: confirmed ? "moving the files" : "asking what would move", since: Date.now() });
-    const body: DatasetFields = confirmed ? { move_into: into, confirm_move: true } : { move_into: into };
+    const said = identity ? { identity, ...(holds === "type" ? { unmapped: noCode } : {}) } : {};
+    const body: DatasetFields = confirmed ? { move_into: into, confirm_move: true, ...said } : { move_into: into, ...said };
     placesDoor
       .set(place.id, body)
       .then((answer) => {
@@ -156,7 +169,7 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
       <button type="button" className="button secondary" onClick={onClose}>
         Cancel
       </button>
-      <button type="button" className="button" disabled={into === null || count === 0 || working} onClick={() => move(false)}>
+      <button type="button" className="button" disabled={into === null || count === 0 || working || unanswered} onClick={() => move(false)}>
         Next
       </button>
     </div>
@@ -182,6 +195,11 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
             <Choice name="into" checked={into === "originals"} disabled={working} onPick={() => setInto("originals")} label="Identified" hint={layout.move_into?.originals ?? "names in the files; NILS pseudonymises them"} />
             <Choice name="into" checked={into === "anon"} disabled={working} onPick={() => setInto("anon")} label="Already anonymised" hint={layout.move_into?.anon ?? "read as they are"} />
           </div>
+          {into === "originals" && !ruled && (
+            <div className="field">
+              <HoldsQuestion name="sort-holds" holds={holds} type={namedType} types={types} disabled={working} noCode={noCode} onHolds={setHolds} onType={setHoldsType} onNoCode={setNoCode} />
+            </div>
+          )}
         </>
       )}
       {question && asked && (
@@ -241,7 +259,11 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
     placesDoor
       .set(place.id, body)
       .then((answer: PlaceAnswer) => onDone(`${answer.name}: IDs set.`))
-      .catch((e: unknown) => setAct({ kind: "failed", why: messageOf(e) }));
+      .catch((e: unknown) => {
+        // an identified dataset with no identity rule is refused in long words: the short line, the engine's words behind the "?"
+        const said = plainError(e, messageOf(e));
+        setAct({ kind: "failed", why: said.words, detail: said.detail });
+      });
   };
 
   const ready = !working && patientId !== null && (!anonymised || subjects !== null) && (folder !== "id-type" || pidChoice === "id-type");
@@ -306,7 +328,12 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
         </div>
       </div>
       {act.kind === "working" && <Wait phase={act.phase} since={act.since} />}
-      {act.kind === "failed" && <p className="warn">{act.why}</p>}
+      {act.kind === "failed" && (
+        <p className="warn">
+          {act.why}
+          {act.detail !== undefined && act.detail !== act.why && <Hint text={act.detail} />}
+        </p>
+      )}
     </Dialog>
   );
 }

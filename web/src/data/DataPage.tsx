@@ -34,6 +34,7 @@ import { NewCohortDialog, makingRefusal } from "./NewCohort";
 import { useLiveJobs } from "./Now";
 import { plainError } from "./plain";
 import { kindWords, nextStep, stepCommand, type StepId } from "./steps";
+import { asksHolds } from "./pseudoStep";
 import {
   cardLine,
   cohortLine,
@@ -633,7 +634,7 @@ function DatasetCard(props: {
               {countWords(first)}
             </div>
           ) : (
-            <div className={next.step === "pseudonymise" && (d.held?.identifiers ?? 0) > 0 ? "dp-line look" : "dp-line"} title={lookWords || undefined}>
+            <div className={next.step === "pseudonymise" && ((d.held?.identifiers ?? 0) > 0 || asksHolds(d)) ? "dp-line look" : "dp-line"} title={lookWords || undefined}>
               {line}
             </div>
           )}

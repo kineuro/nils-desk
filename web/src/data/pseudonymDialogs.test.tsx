@@ -77,6 +77,14 @@ describe("the tag chooser", () => {
     expect(html).toContain("no name in the standard");
   });
 
+  it("withholds Save from a dataset that is asked what PatientID holds, and says why", () => {
+    const asks = chooser({ dataset: { ...dataset, identity: null, trees: { ...dataset.trees, originals: { files: 10 } } } as Dataset });
+    expect(asks).toContain("Say what PatientID holds first.");
+    expect(asks).not.toContain(">Save<");
+    const ruled = chooser({ dataset: { ...dataset, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, trees: { ...dataset.trees, originals: { files: 10 } } } as Dataset });
+    expect(ruled).toContain(">Save<");
+  });
+
   it("counts what leaves and what stays by the same rules, so a hundred are never removed while four are kept", () => {
     const html = chooser();
     expect(html).toContain('<span class="k">removed</span><span class="v">96</span>');

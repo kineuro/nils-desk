@@ -455,6 +455,19 @@ describe("a dataset whose pseudonymise step ran (2026-10-17)", () => {
     expect(cardLine(ident, nextStep(ident, null, done), done)).not.toContain("pseudonymised");
   });
 
+  it("stays at the step while no rule says what PatientID holds, whatever a run before it wrote, and the card says what it needs (2026-11-11)", () => {
+    const unruled = dataset({ ...ident, identity: null });
+    const done = ran({ state: "done", files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    expect(nextStep(unruled, null, done)).toMatchObject({ word: "Identified", step: "pseudonymise", label: "Pseudonymise" });
+    expect(cardLine(unruled, nextStep(unruled, null, done), done)).toBe("Needs what PatientID holds");
+    // before held IDs too: the kind of ID comes before any subject code
+    const held = dataset({ ...unruled, held: { files: 7544, identifiers: 8 } });
+    expect(cardLine(held, nextStep(held, null), null)).toBe("Needs what PatientID holds");
+    // a rule, once given, lets the run's own counts speak again
+    const ruled = dataset({ ...ident, identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    expect(nextStep(ruled, null, done)).toMatchObject({ word: "Ready", step: "review" });
+  });
+
   it("takes no refused file for work: whole counts with nothing waiting are done, though the originals less the copy is not 0", () => {
     const small = dataset({ ...ident, trees: { originals: { path: "/x/derivatives/dcm-original", files: 7544, bytes: null }, anon: { path: "/x/derivatives/dcm-anon", files: 7444, last_written: null } } });
     // a copy that holds files says a run ran: with no summary, the 100 the trees lack are never said to wait (2026-10-17)

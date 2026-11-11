@@ -24,6 +24,9 @@ import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { messageOf } from "../settings/common";
+import { Hint } from "../ui/Hint";
+import { plainError, type Plain } from "./plain";
+import { asksHolds } from "./pseudoStep";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import type { Dataset } from "./datasets";
@@ -59,14 +62,16 @@ export function TagsDialog({
   const [only, setOnly] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState("");
-  const [why, setWhy] = useState<string | null>(null);
+  const [why, setWhy] = useState<Plain | null>(null);
   const [saving, setSaving] = useState(false);
   const changing = needsWork(caps, "Choosing which tags go", [
     ["data:work", "the Data page"],
     ["places:work", "the Places page"],
   ]);
   const takes = served(caps, "PUT /api/places/{id}");
-  const mayChange = changing === null && takes;
+  // the engine refuses any change to a dataset with identified files and no identity rule, so the control waits for the answer
+  const asks = asksHolds(dataset);
+  const mayChange = changing === null && takes && !asks;
 
   const rows = tagRows(policy, tags);
   const counts = policy ? tagCounts(policy, tags) : null;
@@ -80,7 +85,7 @@ export function TagsDialog({
   const add = () => {
     const asked = addRemoved(policy, tags, adding);
     if ("refusal" in asked) {
-      setWhy(asked.refusal);
+      setWhy({ words: asked.refusal, detail: asked.refusal });
       return;
     }
     setTags(asked.tags);
@@ -96,7 +101,7 @@ export function TagsDialog({
       .then(() => onSaved(`The tags of ${dataset.name} are changed; the next bring-in reads them so.`))
       .catch((e: unknown) => {
         setSaving(false);
-        setWhy(messageOf(e));
+        setWhy(plainError(e, messageOf(e)));
       });
   };
 
@@ -111,8 +116,13 @@ export function TagsDialog({
         {mayChange ? "Cancel" : "Close"}
       </button>
       <span className="grow" />
-      {!mayChange && <span className="meta">{changing ?? "This engine does not take a change to a dataset here."}</span>}
-      {why && <span className="warn">{why}</span>}
+      {!mayChange && <span className="meta">{changing ?? (asks ? "Say what PatientID holds first." : "This engine does not take a change to a dataset here.")}</span>}
+      {why && (
+        <span className="warn">
+          {why.words}
+          {why.detail !== why.words && <Hint text={why.detail} />}
+        </span>
+      )}
     </div>
   );
 

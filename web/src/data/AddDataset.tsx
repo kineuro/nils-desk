@@ -24,10 +24,12 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { RootForm } from "./AddRoot";
-import { linkage, type IdentityRule, type LinkageType, type Subjects } from "./datasets";
+import { linkage, type LinkageType, type Subjects } from "./datasets";
 import { writable } from "./FinishDataset";
+import { HoldsQuestion } from "./HoldsQuestion";
 import { plainError } from "./plain";
-import { SAME_EVERYWHERE, typeLabel, typeName } from "./pseudonyms";
+import { typeLabel } from "./pseudonyms";
+import { holdsRule } from "./pseudoStep";
 import { asksIdentity, asksIds, dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "found"; folders: RootFolder[]; count: number; next: string | null } | { kind: "failed"; why: string };
@@ -157,8 +159,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
 
   const look = seen?.kind === "seen" ? seen.look : null;
   // the rule the identified folder's originals are read under: PatientID, as what the person said it holds
-  const identity: IdentityRule | null =
-    holds === "same" ? { id_type: SAME_EVERYWHERE, from: [{ field: "PatientID" }] } : holds === "type" && typeName(holdsType) !== "" ? { id_type: typeName(holdsType), from: [{ field: "PatientID" }] } : null;
+  const identity = holdsRule(holds, holdsType);
   const unanswered = look !== null && !look.added && asksIdentity(look) && identity === null;
   const foot = look ? (
     <div className="row actions">
@@ -240,59 +241,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
               )}
               {!look.added && asksIdentity(look) && (
                 <div className="field">
-                  <span className="label">PatientID holds an identifying ID</span>
-                  <p className="meta">personnummer, national ID, social security number, or a hospital's or study's own ID: anything that leads to a person. NILS never keeps it; it becomes a subject code.</p>
-                  <div className="choices" role="radiogroup" aria-label="Which kind">
-                    <span className="meta">Which kind</span>
-                    <label className="radio-row">
-                      <input type="radio" name="dataset-holds" checked={holds === "same"} disabled={adding !== null} onChange={() => setHolds("same")} />
-                      <span>
-                        <b>The same everywhere</b> (personnummer, national ID)
-                      </span>
-                    </label>
-                    <label className="radio-row">
-                      <input type="radio" name="dataset-holds" checked={holds === "type"} disabled={adding !== null} onChange={() => setHolds("type")} />
-                      <span>
-                        <b>A hospital or study ID</b>
-                      </span>
-                    </label>
-                  </div>
-                  {holds === "type" && (
-                    <div className="field-row">
-                      {types.length > 0 ? (
-                        <div className="input">
-                          <select value={holdsType} aria-label="Which hospital or study ID" disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)}>
-                            {types.map((t) => (
-                              <option key={t.name} value={t.name} title={t.description ?? undefined}>
-                                {typeLabel(t)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="input mono">
-                          <input value={holdsType} placeholder="study-id" aria-label="Which hospital or study ID" spellCheck={false} disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)} />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {holds === "type" && (
-                    <div className="choices" role="radiogroup" aria-label="An ID with no subject code">
-                      <span className="meta">An ID with no subject code</span>
-                      <label className="radio-row">
-                        <input type="radio" name="dataset-no-code" checked={noCode === "code"} disabled={adding !== null} onChange={() => setNoCode("code")} />
-                        <span>
-                          <b>Generate its subject code from the ID</b> <span className="meta">recommended</span>
-                        </span>
-                      </label>
-                      <label className="radio-row">
-                        <input type="radio" name="dataset-no-code" checked={noCode === "hold"} disabled={adding !== null} onChange={() => setNoCode("hold")} />
-                        <span>
-                          <b>Wait for a map</b>
-                        </span>
-                      </label>
-                    </div>
-                  )}
+                  <HoldsQuestion name="dataset-holds" holds={holds} type={holdsType} types={types} disabled={adding !== null} noCode={noCode} onHolds={setHolds} onType={setHoldsType} onNoCode={setNoCode} />
                 </div>
               )}
               {look.added && <p className="meta">Already a dataset.</p>}

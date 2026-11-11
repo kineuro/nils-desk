@@ -12,6 +12,7 @@ import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
 import type { TagPolicy } from "./policy";
 import { parseCsv, type Dataset } from "./pseudonyms";
 import {
+  asksHolds,
   chipOf,
   codeColumnsOf,
   codePairs,
@@ -34,6 +35,7 @@ import {
   rulesLine,
   holdsOf,
   holdsPatch,
+  holdsRule,
   rulesOf,
   rulesPatch,
   STANDARD,
@@ -359,9 +361,60 @@ describe("what the originals' PatientID holds (2026-10-10)", () => {
     expect(holdsPatch(rule("patient-id"), { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
     expect(holdsPatch(rule("patient-id"), { holds: "type", type: "patient-id" })).toEqual({});
     expect(holdsPatch(rule("patient-id"), { holds: "type", type: " " })).toEqual({});
-    expect(holdsPatch({}, { holds: "same", type: "" })).toEqual({});
     // a subject code taken as written is no part of a rule for an identifying ID
     expect(holdsPatch({ identity: { id_type: "study-id", code: "verbatim", from: [{ field: "PatientID" }] } }, { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+  });
+});
+
+describe("an identified dataset whose rule says nothing of PatientID (2026-11-11)", () => {
+  const none: HeldIds = { files: 0, identifiers: 0, ids: [], subjects: { coded: 0, generated: 0 } };
+  const unruled = { ...d, identity: null, held: { files: 0, identifiers: 0 } } as Dataset;
+
+  it("is asked where it has originals and its rule is known to be none, and never where the engine says nothing of the rule", () => {
+    expect(asksHolds(unruled)).toBe(true);
+    expect(asksHolds(d)).toBe(false);
+    // an engine that sends no rule field is not read as one with no rule
+    expect(asksHolds({ trees: base.trees })).toBe(false);
+    // no originals tree: nothing of it is pseudonymised
+    expect(asksHolds({ identity: null, trees: null })).toBe(false);
+    expect(asksHolds({ identity: null, trees: { originals: null, anon: base.trees.anon } })).toBe(false);
+    // an originals tree that is empty, or not counted yet, still asks: the engine refuses by the tree, not by what it holds
+    expect(asksHolds({ identity: null, trees: { ...base.trees, originals: { ...base.trees.originals, files: 0 } } })).toBe(true);
+    expect(asksHolds({ identity: null, trees: { ...base.trees, originals: { ...base.trees.originals, files: null } } })).toBe(true);
+  });
+
+  it("asks before anything else, offers no run, and says so on its chip, its middle box and the rail", () => {
+    const v = stepView(unruled, step({ held: 0 }), none, [], false);
+    expect(v.phase).toBe("asks");
+    expect(primaryOf(v, false, false)).toBeNull();
+    expect(primaryOf(v, true, false)).toBeNull();
+    expect(primaryOf(v, true, true)).toBeNull();
+    expect(chipOf(v, false)).toEqual({ words: "Needs what PatientID holds", tone: "caution" });
+    expect(idsBox(v)).toEqual({ big: "?", words: "what PatientID holds is not said yet", caution: true });
+    expect(railWords(v)).toEqual({ what: "needs what PatientID holds", when: "next step", next: true });
+    expect(waitingLine(v)).toBeNull();
+    // held IDs, a copy already written or a done run change nothing: the question comes first
+    expect(stepView({ ...unruled, held: base.held } as Dataset, step(), heldIds, [], false).phase).toBe("asks");
+    const copied = { ...unruled, trees: { ...base.trees, anon: { ...base.trees.anon, files: 7544 } } } as Dataset;
+    expect(stepView(copied, step({ state: "done", files: 7544, waiting: 0, held: 0 }), none, [], false).phase).toBe("asks");
+    expect(stepView(unruled, step({ held: 0 }), none, [], false, null, { summary: "reading" }).phase).toBe("asks");
+    // a run under way is said as running
+    expect(stepView(unruled, step({ held: 0 }), none, [], true).phase).toBe("running");
+  });
+
+  it("makes the rule its answer names: PatientID read as the kind said, and none until a kind and its type are named", () => {
+    expect(holdsRule("same", "")).toEqual({ id_type: "personnummer", from: [{ field: "PatientID" }] });
+    expect(holdsRule("type", "study-id")).toEqual({ id_type: "study-id", from: [{ field: "PatientID" }] });
+    expect(holdsRule("type", " Study ID ")).toEqual({ id_type: "study-id", from: [{ field: "PatientID" }] });
+    expect(holdsRule("type", " ")).toBeNull();
+    expect(holdsRule(null, "study-id")).toBeNull();
+  });
+
+  it("sends a whole rule where there was none, through the patch a change of kind uses", () => {
+    expect(holdsPatch({ identity: null }, { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+    expect(holdsPatch({ identity: null }, { holds: "type", type: "study-id" })).toEqual({ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    expect(holdsPatch({}, { holds: "type", type: "study-id" })).toEqual({ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    expect(holdsPatch({ identity: null }, { holds: "type", type: "" })).toEqual({});
   });
 });
 

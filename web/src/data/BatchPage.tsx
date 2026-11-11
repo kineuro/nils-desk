@@ -15,6 +15,7 @@ import type { Event } from "../objects/client";
 import { data, ops, type ReviewItem } from "../ops/client";
 import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
+import { plainError } from "./plain";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
@@ -94,7 +95,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
         setSaid(retry ? `The ${n(refusedCount)} refused files are read again as job ${j.job}.` : `A read of ${dataset.name} is queued as job ${j.job}.`);
         read();
       })
-      .catch((e: unknown) => setSaid(messageOf(e)));
+      .catch((e: unknown) => setSaid(plainError(e, messageOf(e)).words));
   };
 
   const sort = () => {

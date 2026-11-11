@@ -7,8 +7,9 @@
 // edits; and the originals once every file has its copy, kept, vaulted or
 // purged, the act itself behind Vaulted and Purged. Above them, where the
 // dataset's rule names it, what the originals' PatientID holds, which can be
-// changed until anything is pseudonymised (2026-10-10). Back to standard, Cancel
-// and Save. The cohort a dataset feeds is its settings', and the dates are a
+// changed until anything is pseudonymised (2026-10-10); a dataset with
+// originals and no rule is asked it here, whatever was pseudonymised. Back to
+// standard, Cancel and Save. The cohort a dataset feeds is its settings', and the dates are a
 // release's.
 
 import { useEffect, useState } from "react";
@@ -22,7 +23,7 @@ import { COPY_GETS, COPY_ID_WARNING, copyTypes, writable } from "./FinishDataset
 import { plainError, type Plain } from "./plain";
 import { tagCounts, NO_TAGS, type TagPolicy } from "./policy";
 import { datasets as placeDoor, purgeRefusal, SAME_EVERYWHERE, typeLabel, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
-import { holdsOf, holdsPatch, rulesOf, rulesPatch, STANDARD, type Holds, type Rules } from "./pseudoStep";
+import { asksHolds, holdsOf, holdsPatch, rulesOf, rulesPatch, STANDARD, type Holds, type Rules } from "./pseudoStep";
 
 /** What each choice is, behind its "?". */
 const HELP = {
@@ -34,7 +35,7 @@ const HELP = {
   originals: "Kept: locked here. Vaulted: moved into a backup place and not read. Purged: deleted once each copy is proven.",
 };
 
-function Options<T extends string>(props: { label: string; value: T; options: [T, string, boolean?][]; onPick: (v: T) => void }) {
+function Options<T extends string>(props: { label: string; value: T | null; options: [T, string, boolean?][]; onPick: (v: T) => void }) {
   return (
     <span className="ps-options" role="group" aria-label={props.label}>
       {props.options.map(([v, words, off]) => (
@@ -103,6 +104,8 @@ export function RulesDialog(props: {
   const pidLocked = written > 0;
   const ready = !saving && !(rules.pid === "type" && rules.pidType.trim() === "") && !(holds?.holds === "type" && holds.type.trim() === "");
   const wasHolds = holdsOf(d);
+  // a kind once said is changed only before the first file is pseudonymised; one never said is answered at any time
+  const holdsLocked = pidLocked && wasHolds !== null;
   /** What the originals may hold: a hospital or study ID of any type but the subject code's. */
   const holdsTypes = writable(allTypes);
   /** What the copy may get, given what the originals hold as now chosen. */
@@ -146,24 +149,24 @@ export function RulesDialog(props: {
   return (
     <Dialog title={`Rules for ${d.name}`} icon="shield" onClose={onClose} foot={foot}>
       <div className="ps-rules">
-        {holds && (
+        {(holds || asksHolds(d)) && (
           <div className="ps-rule">
             <span className="ps-rule-label">PatientID holds</span>
             <span className="ps-rule-choice">
               <Options
                 label="PatientID holds"
-                value={holds.holds}
+                value={holds?.holds ?? null}
                 options={[
-                  ["same", "The same everywhere (personnummer, national ID)", pidLocked && wasHolds?.holds !== "same"],
-                  ["type", "A hospital or study ID", pidLocked && wasHolds?.holds !== "type"],
+                  ["same", "The same everywhere (personnummer, national ID)", holdsLocked && wasHolds?.holds !== "same"],
+                  ["type", "A hospital or study ID", holdsLocked && wasHolds?.holds !== "type"],
                 ]}
                 onPick={(h) => setHolds((was) => ({ holds: h, type: h === "type" ? was?.type || holdsTypes[0]?.name || "" : "" }))}
               />
-              {holds.holds === "type" && (
+              {holds?.holds === "type" && (
                 <label className="ps-which">
                   which
                   {holdsTypes.length > 0 ? (
-                    <select value={holds.type} disabled={pidLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })}>
+                    <select value={holds.type} disabled={holdsLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })}>
                       {holdsTypes.map((t) => (
                         <option key={t.name} value={t.name} title={t.description ?? undefined}>
                           {typeLabel(t)}
@@ -171,12 +174,12 @@ export function RulesDialog(props: {
                       ))}
                     </select>
                   ) : (
-                    <input value={holds.type} placeholder="study-id" spellCheck={false} disabled={pidLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })} />
+                    <input value={holds.type} placeholder="study-id" spellCheck={false} disabled={holdsLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })} />
                   )}
                 </label>
               )}
             </span>
-            <Hint text={pidLocked ? `${HELP.holds} ${HELP.written}` : HELP.holds} />
+            <Hint text={holdsLocked ? `${HELP.holds} ${HELP.written}` : HELP.holds} />
           </div>
         )}
         <div className="ps-rule">

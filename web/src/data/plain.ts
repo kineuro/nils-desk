@@ -15,6 +15,9 @@ export interface Plain {
 
 /** The refusals the desk knows, first match wins: what the engine says, and the line shown. */
 const KNOWN: { test: RegExp; words: string }[] = [
+  // an identified dataset with no identity rule, refused at its declaration, its pseudonymise run or its bring-in: before the lines
+  // below, since the engine's words may name PatientID as well
+  { test: /\b(no|without an?|needs an?|give (it |the dataset )?an?|set an?|missing) identity rule\b|identity rule (is )?(missing|not set|not given)/i, words: "Say what PatientID holds first." },
   { test: /does not say what PatientID|does not say how its subjects|PatientID holds/i, words: "Set the IDs first." },
   { test: /structure is unknown|is undeclared|entries beside derivatives|say which tree/i, words: "Sort the files first." },
   { test: /originals.*pseudonymiser alone|in a dataset's originals/i, words: "Pseudonymise it first." },

@@ -11,7 +11,7 @@
 
 import { door } from "../ask/client";
 import { NO_TAGS, sameTags, tagCounts, tagsOf, type TagPolicy } from "./policy";
-import { SAME_EVERYWHERE, shapeOf, type Csv, type Dataset, type DatasetPatch } from "./pseudonyms";
+import { SAME_EVERYWHERE, shapeOf, typeName, type Csv, type Dataset, type DatasetPatch, type IdentityRule } from "./pseudonyms";
 import type { SummaryStep } from "./summary";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -117,9 +117,11 @@ export const held = {
 /**
  * The step's phase: never run, IDs without a code, ready to go, running, or
  * done; or counting, while a run ran and the summary that says what it left
- * is not read (2026-10-17), when the step offers nothing and says no next step.
+ * is not read (2026-10-17), when the step offers nothing and says no next step;
+ * or asks, while no rule says what the originals' PatientID holds, when the
+ * step offers that one question and no run.
  */
-export type Phase = "fresh" | "codes" | "ready" | "running" | "done" | "counting";
+export type Phase = "asks" | "fresh" | "codes" | "ready" | "running" | "done" | "counting";
 
 /** One held ID as a row of the step: its code now, or the one the map being rehearsed gives it. */
 export interface IdRow extends HeldId {
@@ -294,19 +296,21 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
   const rest = c.unseen === null || c.unseenPartial || c.failed;
   const phase: Phase = running
     ? "running"
-    : !c.ran && c.copy === 0 && heldFiles === 0 && rows.length === 0
-      ? "fresh"
-      : unread.summary
-        ? "counting"
-        : without.ids > 0 || unlisted
-          ? "codes"
-          : go > 0
-            ? "ready"
-            : c.done
-              ? "done"
-              : rest
-                ? "ready"
-                : "done";
+    : asksHolds(d)
+      ? "asks"
+      : !c.ran && c.copy === 0 && heldFiles === 0 && rows.length === 0
+        ? "fresh"
+        : unread.summary
+          ? "counting"
+          : without.ids > 0 || unlisted
+            ? "codes"
+            : go > 0
+              ? "ready"
+              : c.done
+                ? "done"
+                : rest
+                  ? "ready"
+                  : "done";
   return {
     phase,
     originals: c.originals,
@@ -343,6 +347,9 @@ export function goWords(v: Pick<StepView, "go" | "goPartial"> & Partial<Pick<Ste
   return `${v.goPartial ? "at least " : ""}${files(v.go)}`;
 }
 
+/** What a step that asks says in a few words, on its chip and on the rail. */
+export const ASKS_WORDS = "Needs what PatientID holds";
+
 /** What the step's one primary button does: run the dataset's thread, or open the IDs to give them codes. */
 export type Act = "run" | "find" | "codes";
 
@@ -377,6 +384,7 @@ export function waitingLine(v: StepView): string | null {
 /** The step's chip: what waits on a person, or that it runs. */
 export function chipOf(v: StepView, open: boolean): { words: string; tone: "caution" | "ok" | "brand" } | null {
   if (v.phase === "running") return { words: "Running", tone: "brand" };
+  if (v.phase === "asks") return { words: ASKS_WORDS, tone: "caution" };
   if (v.phase === "codes") return { words: open && v.coded > 0 ? `${ids(v.without.ids)} without a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, tone: "caution" };
   if (v.phase === "ready" && v.rows.length > 0) return { words: "Every ID has a subject code", tone: "ok" };
   return null;
@@ -393,6 +401,7 @@ export function idsBox(v: StepView): { big: string; words: string; caution: bool
     const coded = v.subjects?.coded ?? null;
     return { big: coded === null ? idsUnknown(v) : n(coded), words: `${coded === 1 ? "subject" : "subjects"} · coded by the key from an ID that is the same everywhere`, caution: false };
   }
+  if (v.phase === "asks") return { big: "?", words: "what PatientID holds is not said yet", caution: true };
   if (v.phase === "fresh") return { big: "?", words: "found at the first run", caution: false };
   if (v.idsReading) return { big: idsUnknown(v), words: "IDs", caution: false };
   const all = v.rows.length > 0 ? v.rows.length : v.without.ids;
@@ -405,6 +414,7 @@ export function idsBox(v: StepView): { big: string; words: string; caution: bool
 /** The pseudonymised step on the rail while it waits on a person: what it needs, and that it is next; nothing while it counts. */
 export function railWords(v: StepView): { what: string; when: string; next: boolean } | null {
   if (v.phase === "running" || v.phase === "done" || v.phase === "counting") return null;
+  if (v.phase === "asks") return { what: `${ASKS_WORDS.charAt(0).toLowerCase()}${ASKS_WORDS.slice(1)}`, when: "next step", next: true };
   if (v.phase === "fresh") return { what: "not yet", when: "next step", next: true };
   if (v.phase === "codes") return { what: v.coded > 0 ? `${n(v.coded)} of ${ids(v.rows.length)} have a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, when: "next step", next: true };
   return { what: `${goWords(v)} to go`, when: "next step", next: true };
@@ -567,16 +577,39 @@ export function holdsOf(d: Pick<Dataset, "identity">): Holds | null {
 }
 
 /**
+ * Whether the dataset is asked what its originals' PatientID holds: it has
+ * an originals tree and its rule is known to be none, which is where the
+ * engine refuses to pseudonymise it or bring it in. A dataset declared with
+ * no identity rule had its PatientID read under a default type, which kept
+ * identifying IDs as values; the question is asked before any run instead.
+ * An engine that does not say the rule asks nothing.
+ */
+export function asksHolds(d: Pick<Dataset, "identity" | "trees">): boolean {
+  return Boolean(d.trees?.originals) && d.identity === null;
+}
+
+/** The rule an answer makes: PatientID read as the kind said; null until a kind, and for a hospital or study ID its type, is named. */
+export function holdsRule(holds: Holds["holds"] | null, type: string): IdentityRule | null {
+  const named = holds === "same" ? SAME_EVERYWHERE : holds === "type" ? typeName(type) : "";
+  return named === "" ? null : { id_type: named, from: [{ field: "PatientID" }] };
+}
+
+/**
  * What Save sends when the kind of ID changed (2026-10-10, found trying the
  * desk: a dataset added with the wrong kind had no way back but removing
  * it): the identity rule with the new type, where it reads the ID kept, and
- * nothing when nothing changed or no type is named. The engine takes it only
- * before anything is pseudonymised, as the dialog does.
+ * nothing when nothing changed or no type is named. A dataset with no rule
+ * gets one that reads PatientID as the kind said. The dialog offers a change
+ * of kind only before anything is pseudonymised; a first answer at any time.
  */
-export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds): DatasetPatch {
-  const was = holdsOf(d);
+export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds, noCode?: "code" | "hold"): DatasetPatch {
   const type = h.holds === "same" ? SAME_EVERYWHERE : h.type.trim();
-  if (!was || !d.identity || type === "" || type === d.identity.id_type) return {};
+  if (type === "" || type === d.identity?.id_type) return {};
+  if (!d.identity) {
+    const identity = holdsRule(h.holds, h.type);
+    // a hospital or study ID is asked what becomes of an ID no map names, in the same request as its rule
+    return identity ? { identity, ...(h.holds === "type" && noCode ? { unmapped: noCode } : {}) } : {};
+  }
   const { code: _taken, ...kept } = d.identity;
   return { identity: { ...kept, id_type: type } };
 }

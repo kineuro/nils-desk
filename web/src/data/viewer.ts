@@ -452,7 +452,12 @@ export function roleWord(role: string): string {
   return known[role.toLowerCase()] ?? role;
 }
 
-/** The ID types a person may show subjects by, with the words for them; the scanner's study UID is no person's ID. */
+/**
+ * The ID types a person may show subjects by, with the words for them; the scanner's study UID is no person's ID.
+ * `subject-code` reads Alias here: as a type it is both the subject code of a subject merged into this one and a
+ * subject's own subject code as a pseudonymised copy holds it, and the engine's facet counts it only where a real
+ * alias is kept, so what this menu shows by it is the alias.
+ */
 export function showOptions(idTypes: Facet[]): { value: string; label: string }[] {
   const words: Record<string, string> = { "study-id": "Study ID", "subject-code": "Alias", "patient-id": "Patient ID" };
   return [
