@@ -9,7 +9,7 @@ import { door } from "../ask/client";
 import type { Place } from "../objects/client";
 import { newInOriginals, type Dataset, type DatasetFields, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
-import { countsOf } from "./pseudoStep";
+import { asksHolds, countsOf } from "./pseudoStep";
 import type { DatasetSummary } from "./summary";
 
 /** A folder under a root, as the engine lists it: whether it is a dataset yet. The list looks inside none of them. */
@@ -166,7 +166,8 @@ function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null):
 /**
  * A dataset's state word and its next step: unknown files are sorted into
  * their folder first, anonymised data says its IDs, identified data is
- * pseudonymised, what is ready is read, a read that stopped part way is read
+ * pseudonymised (and first asked what its PatientID holds, where no rule
+ * says), what is ready is read, a read that stopped part way is read
  * again, and what is read is sorted. `why` is the reason it is not read,
  * where the places door gave one; `s` its summary, where read, whose
  * pseudonymised step says what a run of it left.
@@ -177,7 +178,8 @@ export function nextStep(d: Dataset, why: string | null = notReadOf(d), s: Pick<
   if (d.state === "unknown" || d.arrives === "undeclared") return at("Unknown", "sort-files");
   if (why !== null) return at("Anonymised", "set-ids");
   const identified = d.state === "identified" || d.state === "both" || (d.state === undefined && d.arrives === "identified");
-  if (identified && pseudonymiseWaits(d, s)) return at("Identified", "pseudonymise");
+  // no rule says what its PatientID holds: its step asks that first, whatever a run before it left
+  if (identified && (asksHolds(d) || pseudonymiseWaits(d, s))) return at("Identified", "pseudonymise");
   if (d.digests.count === 0) return at("Ready", "read");
   // the newest read was cancelled or failed part way: its stacks are not all there to sort, and a read again skips what it read
   if (readStopped(d, s)) return at("Ready", "read-again");

@@ -34,7 +34,7 @@ import type { LiveJobs } from "./Now";
 import { DatasetSettings } from "./DatasetSettings";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
-import { railWords } from "./pseudoStep";
+import { asksHolds, railWords } from "./pseudoStep";
 import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepNotes } from "./StepNotes";
 import { StepRail } from "./StepRail";
@@ -124,7 +124,8 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
   return {
     next,
     primary,
-    readNew: readable && next.step !== "read-new" && !again && d.digests.count > 0,
+    // reading new files pseudonymises them: not offered while no rule says what PatientID holds
+    readNew: readable && next.step !== "read-new" && !again && d.digests.count > 0 && !asksHolds(d),
     view: d.totals.stacks > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
     readAgain: readable && !again && d.digests.count > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",

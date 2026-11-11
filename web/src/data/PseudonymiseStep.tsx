@@ -27,12 +27,14 @@ import { Icon } from "../ui/Icon";
 import { useKept, useReads } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { bringInBody, bringInName, jobs, packFor, type Dataset } from "./datasets";
+import { HoldsQuestion, useHoldsTypes } from "./HoldsQuestion";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { plainError, type Plain } from "./plain";
 import { policyKept } from "./policy";
 import {
   bytesWords,
   csvLabels,
+  datasets as placeDoor,
   hideNumbers,
   linkage,
   NOTHING_ASKED,
@@ -59,6 +61,7 @@ import {
   everyFile,
   held,
   goWords,
+  holdsPatch,
   idsBox,
   idsUnknown,
   idTypeOf,
@@ -71,6 +74,7 @@ import {
   waitingLine,
   waitWords,
   type HeldIds,
+  type Holds,
   type IdRow,
   type Matched,
   type StepView,
@@ -365,7 +369,9 @@ export function PseudonymiseStep(props: StepProps) {
           <Wait phase={pseudo.acting.phase} since={pseudo.acting.since} />
         </div>
       )}
-      {open ? (
+      {v.phase === "asks" ? (
+        <Asks caps={caps} dataset={d} onSaved={onChanged} />
+      ) : open ? (
         <Codes caps={caps} dataset={d} pseudo={pseudo} view={v} primary={primary} busy={pseudo.acting !== null} onRun={(map) => act(map)} onGenerate={generate} onFailed={onFailed} />
       ) : (
         <div className="ps-actions">
@@ -401,6 +407,67 @@ export function PseudonymiseStep(props: StepProps) {
         </div>
       )}
     </section>
+  );
+}
+
+/* ---------------------------------------------------------------- the question before any run */
+
+/**
+ * What the originals' PatientID holds, asked on the step of a dataset whose
+ * rule says nothing of it: the question a dataset is asked when it is added,
+ * in the same words, saved through the door a change of its rules uses. No
+ * run is offered until it is answered.
+ */
+function Asks({ caps, dataset: d, onSaved }: { caps: Capabilities; dataset: Dataset; onSaved: (words: string) => void }) {
+  const types = useHoldsTypes(caps);
+  const [holds, setHolds] = useState<Holds["holds"] | null>(null);
+  const [type, setType] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [refused, setRefused] = useState<Plain | null>(null);
+  const locked = needsWork(caps, "Saying what PatientID holds", [
+    ["data:work", "the Data page"],
+    ["places:work", "the Places page"],
+  ]);
+  if (locked !== null || !served(caps, "PUT /api/places/{id}")) {
+    return (
+      <div className="ps-actions">
+        <p className="ps-next">Next: say what PatientID holds.</p>
+        <span className="meta">{locked ?? "This engine has no door for a dataset's rules."}</span>
+      </div>
+    );
+  }
+  // a hospital or study ID is one of the types the engine has, the first until another is picked; typed where it has none
+  const named = type || types[0]?.name || "";
+  const patch = holds === null ? {} : holdsPatch(d, { holds, type: named });
+  const ready = Object.keys(patch).length > 0 && !saving;
+  const save = () => {
+    setSaving(true);
+    setRefused(null);
+    placeDoor
+      .set(d.id, patch)
+      .then(() => onSaved(`${d.name}: rules saved.`))
+      .catch((e: unknown) => {
+        setSaving(false);
+        setRefused(plainError(e, "The rules were not saved."));
+      });
+  };
+  return (
+    <div className="ps-asks">
+      <div className="field">
+        <HoldsQuestion name={`holds-${d.id}`} holds={holds} type={named} types={types} disabled={saving} onHolds={setHolds} onType={setType} />
+      </div>
+      <div className="ps-asks-save">
+        <button type="button" className="button" disabled={!ready} onClick={save}>
+          Save
+        </button>
+        {refused && (
+          <span className="warn" role="alert">
+            {refused.words}
+            <Hint text={refused.detail} />
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

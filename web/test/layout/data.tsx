@@ -7,7 +7,8 @@
 // one event over another, and that a phone's width is one column with no
 // sideways scroll; and an identified dataset whose IDs need a code, so it
 // measures the pseudonymise step opened in place, its three boxes and its
-// IDs one row each; body part, post-contrast and main scans carry their
+// IDs one row each, and under ?norule the same dataset declared with no rule,
+// whose step asks what PatientID holds; body part, post-contrast and main scans carry their
 // Run, the post-contrast one held with the engine's reason, main scans' with
 // the way to their page. Every name and number here is made up.
 
@@ -67,6 +68,8 @@ const DONE = READ || new URLSearchParams(location.search).has("done");
 const PARTIAL = new URLSearchParams(location.search).has("partial");
 /** ?first draws the big dataset never counted (2026-11-05): its summary answered at once with no counts, its first count looking at the working place's files. */
 const FIRST = new URLSearchParams(location.search).has("first");
+/** ?norule draws the identified dataset as one declared with no identity rule (2026-11-11): its step asks what PatientID holds before any run. */
+const NORULE = new URLSearchParams(location.search).has("norule");
 const SHORT = 49836;
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
@@ -116,8 +119,8 @@ function source(s: Spec, i: number) {
     arrives,
     ...ids,
     cohort: s.cohort,
-    held: s.state === "identified" && !DONE ? { files: s.files ?? 0, identifiers: HELD.length } : { files: 0, identifiers: 0 },
-    identity: s.state === "identified" ? { id_type: "study-id", from: [{ field: "PatientID" }] } : null,
+    held: s.state === "identified" && !DONE && !NORULE ? { files: s.files ?? 0, identifiers: HELD.length } : { files: 0, identifiers: 0 },
+    identity: s.state === "identified" && !NORULE ? { id_type: "study-id", from: [{ field: "PatientID" }] } : null,
     trees,
     dataset: { kind: "dataset", state: s.state, root: "data-test", arrives, ...ids, cohort: s.cohort },
     digests: read
@@ -351,8 +354,13 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const scans = over === "without" ? 12 : 1003;
     return json(202, { job: 70, state: "queued", step: run[3], for: `${run[1].slice(0, -1)}:${decodeURIComponent(run[2])}`, scans, over, parts: over === "all" ? 3 : 1, handle: 5, command: ["run"] });
   }
-  if (path === "/api/linkage/held/ids") return json(200, DONE ? { place: "study-identified", files: 0, identifiers: 0, ids: [], subjects: { coded: 4, generated: 1 } } : { place: "study-identified", files: 213, identifiers: HELD.length, ids: HELD, subjects: { coded: 0, generated: 0 } });
+  if (path === "/api/linkage/held/ids") return json(200, DONE || NORULE ? { place: "study-identified", files: 0, identifiers: 0, ids: [], subjects: { coded: 4, generated: 1 } } : { place: "study-identified", files: 213, identifiers: HELD.length, ids: HELD, subjects: { coded: 0, generated: 0 } });
   if (path === "/api/linkage/types") return json(200, [{ name: "study-id", description: "the study's own number" }]);
+  // the answer to what PatientID holds, saved as the dataset's rule: kept for the check to read
+  if (/^\/api\/places\/\d+$/u.test(path) && init?.method === "PUT") {
+    (window as unknown as { saved: unknown[] }).saved = [JSON.parse(typeof init.body === "string" ? init.body : "{}")];
+    return json(200, {});
+  }
   if (path === "/api/jobs") {
     const dataset = url.searchParams.get("dataset");
     if (dataset === "study-big") return json(200, { count: JOBS.length, jobs: JOBS });

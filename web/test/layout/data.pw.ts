@@ -7,6 +7,7 @@
 // sideways scroll; body part's, post-contrast's and main scans' Run sit inside their steps,
 // main scans' Run, Rules and "?" on one line at 1280, 1440 and 1920 pixels also where an
 // identified dataset has nine steps, which says whose its set-aside files are;
+// a dataset declared with no rule is asked what PatientID holds in its step;
 // a map copied as a person copies it reaches the pseudonymise step by Ctrl+V
 // on the box or by Paste, in Firefox as in chromium. Screenshots go to
 // test-results for a look.
@@ -275,6 +276,34 @@ test("on a phone the step's boxes stack and its IDs fit, with no sideways scroll
   expect(table!.x + table!.width).toBeLessThanOrEqual(390);
   await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise-phone.png" });
 });
+
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a dataset with no rule is asked what PatientID holds in its step, Save its one button, with no sideways scroll`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/data.html?norule#data/datasets?dataset=study-identified");
+    const step = page.locator(".dp-detail .ps-step");
+    await expect(step.locator(".tag.caution")).toHaveText("Needs what PatientID holds");
+    await expect(step.locator(".ps-asks .label")).toHaveText("PatientID holds an identifying ID");
+    // one next action: no run, no codes, and the head's own button steps aside
+    await expect(step.locator(".button")).toHaveText(["Save"]);
+    await expect(step.locator(".button")).toBeDisabled();
+    await expect(page.locator(".dp-detail .dp-acts .button:not(.secondary):not(.quiet)")).toHaveCount(0);
+    await expect(page.locator(".dp-card.on .dp-line")).toHaveText("Needs what PatientID holds");
+    await step.getByText("A hospital or study ID").click();
+    await expect(step.getByLabel("Which hospital or study ID")).toHaveValue("study-id");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const asks = (await step.locator(".ps-asks").boundingBox())!;
+    const panel = (await step.boundingBox())!;
+    expect(asks.x).toBeGreaterThanOrEqual(panel.x);
+    expect(asks.x + asks.width).toBeLessThanOrEqual(panel.x + panel.width + 1);
+    await page.locator(".dp-detail").screenshot({ path: `test-results/data-pseudonymise-asks-${device}.png` });
+    await step.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { saved?: unknown[] }).saved)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } }]);
+  });
+}
 
 test("the rules open from Change and fit a phone, five choices and no paragraph", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

@@ -42,6 +42,8 @@ export interface IdType {
   /** Counts, where the engine reports them. */
   identifiers?: number;
   subjects?: number;
+  /** How many of its IDs keep a value; the rest are a lookup alone. Absent from an older engine. */
+  kept?: number;
 }
 
 /**
@@ -62,6 +64,25 @@ export const NEVER_KEPT_WORDS = "No number is stored, only a keyed one-way looku
  */
 export function neverKept(t: Pick<IdType, "name" | "never_kept">): boolean {
   return t.never_kept ?? (t.name === SAME_EVERYWHERE || t.name === RESERVE_TYPE);
+}
+
+/** Behind a type's count where some of its IDs keep no value. */
+export const SOME_KEPT_WORDS = "Only a keyed one-way lookup is stored for the rest, which recognises each when it arrives again.";
+export const NONE_KEPT_WORDS = "No value is stored for these, only a keyed one-way lookup that recognises each when it arrives again.";
+
+/**
+ * A type's count of IDs on the Pseudonyms page: lookups for a type NILS
+ * never keeps; the IDs and how many keep a value where the engine counts the
+ * kept ones and the two differ; else the number alone, as an engine that
+ * counts no kept values has it. Null where the engine gives no count.
+ */
+export function idsCount(t: Pick<IdType, "name" | "never_kept" | "identifiers" | "kept">): { words: string; title?: string } | null {
+  if (typeof t.identifiers !== "number") return null;
+  const ids = t.identifiers;
+  const count = (v: number) => v.toLocaleString("en-US");
+  if (neverKept(t)) return { words: `${count(ids)} ${ids === 1 ? "lookup" : "lookups"}`, title: NEVER_KEPT_WORDS };
+  if (typeof t.kept !== "number" || t.kept === ids) return { words: count(ids) };
+  return { words: `${count(ids)} ${ids === 1 ? "ID" : "IDs"}, ${t.kept === 0 ? "none" : count(t.kept)} kept`, title: t.kept === 0 ? NONE_KEPT_WORDS : SOME_KEPT_WORDS };
 }
 
 /** An ID type as a person reads it: the engine's label, else the same-everywhere type in words, else its name. */

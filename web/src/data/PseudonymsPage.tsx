@@ -26,6 +26,7 @@ import {
   csvRefusal,
   guessRole,
   hideNumbers,
+  idsCount,
   importColumns,
   linkage,
   lookAt,
@@ -139,8 +140,8 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
                     )}
                   </td>
                   <td className="meta">{t.description ?? ""}</td>
-                  <td className="num" title={neverKept(t) ? NEVER_KEPT_WORDS : undefined}>
-                    {typeof t.identifiers === "number" ? (neverKept(t) ? `${n(t.identifiers)} ${t.identifiers === 1 ? "lookup" : "lookups"}` : n(t.identifiers)) : ""}
+                  <td className="num" title={idsCount(t)?.title}>
+                    {idsCount(t)?.words ?? ""}
                   </td>
                   <td className="num">{typeof t.subjects === "number" ? n(t.subjects) : ""}</td>
                 </tr>

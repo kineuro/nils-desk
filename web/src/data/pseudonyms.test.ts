@@ -40,6 +40,8 @@ import {
   firstLineIsValues,
   headerIsValue,
   typeFromHeader,
+  idsCount,
+  NEVER_KEPT_WORDS,
   neverKept,
   subjectsWords,
   typeName,
@@ -488,6 +490,23 @@ describe("nothing of a cell is shown", () => {
   it("reads a file by the separator it is told, and by its first line otherwise", () => {
     expect(parseCsv("a;b\n1;2\n").header).toEqual(["a", "b"]);
     expect(parseCsv("a;b\n1;2\n", ",").header).toEqual(["a;b"]);
+  });
+
+  it("says a type's count by the values it keeps where the engine counts them and the two differ (2026-11-11)", () => {
+    const rest = "Only a keyed one-way lookup is stored for the rest, which recognises each when it arrives again.";
+    const none = "No value is stored for these, only a keyed one-way lookup that recognises each when it arrives again.";
+    expect(idsCount({ name: "patient-id", identifiers: 25, kept: 0 })).toEqual({ words: "25 IDs, none kept", title: none });
+    expect(idsCount({ name: "patient-id", identifiers: 1, kept: 0 })).toEqual({ words: "1 ID, none kept", title: none });
+    expect(idsCount({ name: "patient-id", identifiers: 1200, kept: 1175 })).toEqual({ words: "1,200 IDs, 1,175 kept", title: rest });
+    // every value kept, or an engine that does not count them: the count as it was
+    expect(idsCount({ name: "patient-id", identifiers: 120, kept: 120 })).toEqual({ words: "120" });
+    expect(idsCount({ name: "patient-id", identifiers: 120 })).toEqual({ words: "120" });
+    expect(idsCount({ name: "patient-id", identifiers: 0, kept: 0 })).toEqual({ words: "0" });
+    // a type never kept reads as before, whatever is counted
+    expect(idsCount({ name: "personnummer", identifiers: 4836, kept: 0 })).toEqual({ words: "4,836 lookups", title: NEVER_KEPT_WORDS });
+    expect(idsCount({ name: "study-id", never_kept: true, identifiers: 1 })).toEqual({ words: "1 lookup", title: NEVER_KEPT_WORDS });
+    // no count from the engine: nothing said
+    expect(idsCount({ name: "patient-id" })).toBeNull();
   });
 
   it("knows the two types NILS never keeps, by the engine's word where it gives one and by name where it does not", () => {

@@ -127,6 +127,29 @@ describe("Pseudonyms", () => {
     expect(host.querySelectorAll("tbody tr")[2].querySelector("[title]")).toBeNull();
   });
 
+  it("says how many IDs of a type keep a value where the engine counts them and the two differ, and the count as it was otherwise (2026-11-11)", async () => {
+    engine((c) =>
+      c.url === "/api/linkage/types"
+        ? {
+            status: 200,
+            body: [
+              { id: 1, name: "personnummer", description: "the national number", identifying: true, identifiers: 4836, subjects: 4836, kept: 0 },
+              { id: 2, name: "patient-id", description: "what PatientID holds", identifiers: 25, subjects: 25, kept: 0 },
+              { id: 3, name: "study-id", description: "the study's own number", identifiers: 1200, subjects: 1190, kept: 1175 },
+              { id: 4, name: "site-id", description: "a site's own number", identifiers: 8, subjects: 8, kept: 8 },
+            ],
+          }
+        : undefined,
+    );
+    act(() => root.render(<PseudonymsPage caps={caps7a(DOORS)} />));
+    await settle();
+    const cells = [...host.querySelectorAll("tbody tr")].map((r) => r.querySelectorAll("td")[2]);
+    expect(cells.map((c) => c.textContent)).toEqual(["4,836 lookups", "25 IDs, none kept", "1,200 IDs, 1,175 kept", "8"]);
+    expect(cells[1].getAttribute("title")).toBe("No value is stored for these, only a keyed one-way lookup that recognises each when it arrives again.");
+    expect(cells[2].getAttribute("title")).toBe("Only a keyed one-way lookup is stored for the rest, which recognises each when it arrives again.");
+    expect(cells[3].getAttribute("title")).toBeNull();
+  });
+
   it("never shows a cell of the map in the dialog, not under a header, in the rehearsal, nor in a conflict", async () => {
     const PN = ["199001019999", "199002029999", "199003039999"];
     const csv = `personnummer,code,19900101-9999\n${PN.map((p, i) => `${p},S-000${i},x${i}`).join("\n")}\n`;

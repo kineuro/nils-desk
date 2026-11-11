@@ -14,7 +14,7 @@ import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { liveOf, liveWords, whatWords } from "../ops/progress";
 import { declared } from "./layout";
-import { ranOf } from "./pseudoStep";
+import { ASKS_WORDS, asksHolds, ranOf } from "./pseudoStep";
 import { outsideWords, readStopped, type NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
@@ -606,6 +606,8 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   if (next.word === "Unknown") return "Loose files: choose where they go";
   if (next.step === "set-ids") return "Needs its IDs before it is read";
   if (next.word === "Identified" && next.step === "pseudonymise") {
+    // no rule says what its PatientID holds: that is asked before anything else of it
+    if (asksHolds(d)) return ASKS_WORDS;
     const held = d.held?.identifiers ?? 0;
     if (held > 0) return `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code`;
     // a run of it ran, by the summary or, before it is read, the sources door's batches: what it left waits, never the whole dataset as if nothing had run (2026-10-17)

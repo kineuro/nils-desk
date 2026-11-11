@@ -18,7 +18,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
-import { button, caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
+import { button, caps7a, dialogs, engine, radio, settle as settleReal, type Call } from "../../test/safeWayIn";
+import { GRANTS } from "../grants";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
 import type { Dataset } from "./datasets";
@@ -508,6 +509,94 @@ describe("the pseudonymise step, in the dataset", () => {
     });
     await settle(6);
     expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+  });
+
+  it("asks what PatientID holds where the dataset has no rule, offers no run until it is answered, and saves the rule through the rules' door (2026-11-11)", async () => {
+    // a dataset declared with no identity rule: nothing of it is pseudonymised under a type nobody chose
+    const unruled = dataset({ identity: null, held: { files: 0, identifiers: 0 } });
+    const e = await page(unruled, { held: 0 }, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined), { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    const detail = host.querySelector(".dp-detail")!;
+    const panel = detail.querySelector(".ps-step")!;
+    expect(panel.querySelector(".tag.caution")?.textContent).toBe("Needs what PatientID holds");
+    expect([...panel.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual(["7,544", "?", "0"]);
+    expect(panel.textContent).toContain("what PatientID holds is not said yet");
+    // the question a dataset is asked when it is added, in the same words
+    expect(panel.querySelector(".label")?.textContent).toBe("PatientID holds an identifying ID");
+    expect([...panel.querySelectorAll(".radio-row")].map((r) => r.textContent)).toEqual(["The same everywhere (personnummer, national ID)", "A hospital or study ID"]);
+    // one next action: Save, waiting for an answer; no run, no codes, and the head's own button steps aside
+    expect([...panel.querySelectorAll(".button")].map((b) => b.textContent)).toEqual(["Save"]);
+    expect(button(panel, "Save")!.disabled).toBe(true);
+    expect(button(host, /^Pseudonymise and sort/)).toBeNull();
+    expect(button(host, "Find the IDs")).toBeNull();
+    expect(detail.querySelectorAll(".dp-acts .button:not(.secondary):not(.quiet)")).toHaveLength(0);
+    const pick = detail.querySelector<HTMLButtonElement>(".dp-step-pick")!;
+    expect(pick.closest(".dp-step")!.textContent).toContain("needs what PatientID holds");
+    expect(pick.closest(".dp-step")!.textContent).toContain("next step");
+    // a hospital or study ID, of the type the engine has
+    act(() => radio(panel, "A hospital or study ID").click());
+    await settle(2);
+    expect(panel.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')?.value).toBe("study-id");
+    await act(async () => {
+      button(panel, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9").map((c) => c.body)).toEqual([{ identity: { id_type: "study-id", from: [{ field: "PatientID" }] } }]);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+    expect(text()).toContain("study-identified: rules saved.");
+  });
+
+  it("saves an ID that is the same everywhere for a dataset with no rule, and says the engine's refusal where it will not take it", async () => {
+    const unruled = dataset({ identity: null, held: { files: 0, identifiers: 0 } });
+    const e = await page(unruled, { held: 0 }, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 409, body: { error: "the dataset study-identified is being read; its rule changes once the read ends" } } : undefined), {
+      held: { ...heldIds(), files: 0, identifiers: 0, ids: [] },
+    });
+    const panel = host.querySelector(".ps-step")!;
+    act(() => radio(panel, "The same everywhere").click());
+    await act(async () => {
+      button(panel, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+    // the plain line, and the engine's own words behind its question mark
+    const said = panel.querySelector('[role="alert"]')!;
+    expect(said.textContent).toContain("The rules were not saved.");
+    expect(said.querySelector(".hint")?.getAttribute("title")).toBe("the dataset study-identified is being read; its rule changes once the read ends");
+    // the question stays, to be answered again
+    expect(button(panel, "Save")!.disabled).toBe(false);
+  });
+
+  it("asks a dataset with no rule though a run before it wrote every copy, and keeps reading new files back until it is answered", async () => {
+    const copied = dataset({ identity: null, held: { files: 0, identifiers: 0 }, digests: { count: 1, first: null, last: null, recent: [] }, totals: { subjects: 8, studies: 8, sessions: 8, stacks: 40, refused_files: 0, to_sort: 0 } });
+    copied.trees!.anon!.files = ORIGINALS;
+    await page(copied, { state: "done", files: ORIGINALS, waiting: 0, held: 0 }, undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    const detail = host.querySelector(".dp-detail")!;
+    expect(detail.querySelector(".ps-step .tag.caution")?.textContent).toBe("Needs what PatientID holds");
+    expect(button(detail, "Save")).not.toBeNull();
+    expect(button(detail, "Read new files")).toBeNull();
+    // the card says what it waits for
+    expect(host.querySelector(".dp-line.look")?.textContent).toBe("Needs what PatientID holds");
+  });
+
+  it("says who can answer where this account may not change a dataset's rules", async () => {
+    const unruled = dataset({ identity: null, held: { files: 0, identifiers: 0 } });
+    const e = engine((c) => {
+      if (c.url.startsWith("/api/sources")) return { status: 200, body: { count: 1, window_days: 30, sources: [unruled], rates: null } };
+      if (c.method === "GET" && /^\/api\/places(\?|$)/.test(c.url)) return { status: 200, body: { places: [], enforced: true } };
+      if (c.url.split("?")[0] === "/api/datasets/study-identified/summary") return { status: 200, body: summaryOf(unruled, { held: 0 }) };
+      if (c.url.startsWith("/api/linkage/held/ids?place=study-identified")) return { status: 200, body: { ...heldIds(), files: 0, identifiers: 0, ids: [] } };
+      if (c.method === "GET" && c.url.startsWith("/api/jobs?")) return { status: 200, body: { count: 0, jobs: [] } };
+      return undefined;
+    });
+    await act(async () => {
+      await placesKept.refresh().catch(() => undefined);
+    });
+    act(() => root.render(<DataPage caps={caps7a(DOORS, GRANTS.filter((g) => g !== "places:work"))} install={null} onChanged={() => undefined} dataset="study-identified" step={null} />));
+    await settle(10);
+    const panel = host.querySelector(".ps-step")!;
+    expect(panel.querySelector(".ps-next")?.textContent).toBe("Next: say what PatientID holds.");
+    expect(panel.textContent).toContain("Saying what PatientID holds needs work on the Data page and on the Places page; this account has no work on the Places page.");
+    expect(panel.querySelectorAll(".button")).toHaveLength(0);
+    expect(e.of("PUT", "/api/places/9")).toHaveLength(0);
   });
 
   it("says where its run stopped, in the job's own words, and tries it again: a failure never looks like nothing happened", async () => {
