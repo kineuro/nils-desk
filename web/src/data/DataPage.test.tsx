@@ -19,6 +19,7 @@ import { GRANTS, type Grant } from "../grants";
 import { next } from "../held";
 import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
+import { forgetData, LIST, sourcesKept, whoOf } from "./kept";
 import type { Dataset } from "./datasets";
 import { makingRefusal, nameRefusal } from "./NewCohort";
 import { STEP_RUN_DOORS } from "./stepRun";
@@ -61,6 +62,7 @@ beforeEach(() => {
   root = createRoot(host);
 });
 afterEach(() => {
+  forgetData();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -391,6 +393,8 @@ describe("datasets and cohorts on one page", () => {
         expect(detail).not.toContain("at least");
       }
       act(() => root.unmount());
+      // a page drawn as in a new tab: nothing kept from the one before
+      forgetData();
       root = createRoot(host);
     }
   });
@@ -1002,6 +1006,203 @@ describe("datasets and cohorts on one page", () => {
   });
 });
 
+describe("what the page read last, kept between visits (2026-11-12)", () => {
+  /** An engine that answers nothing until it is let: every read out, and the answers given when the test says. */
+  function slow(list: Dataset[], cohortList: Cohort[] = cohorts) {
+    const out: { path: string; answer: () => void }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (input: RequestInfo | URL) =>
+          new Promise<Response>((done) => {
+            const url = new URL(String(input), "http://x");
+            const sum = /^\/api\/datasets\/([^/]+)\/summary$/.exec(url.pathname);
+            const d = sum ? list.find((x) => x.name === decodeURIComponent(sum[1])) : undefined;
+            const body = url.pathname === "/api/sources" ? { count: list.length, window_days: 30, sources: list, rates: null } : url.pathname === "/api/cohorts" ? cohortList : d ? summaryOf(d) : url.pathname === "/api/jobs" ? { count: 0, jobs: [] } : null;
+            out.push({ path: url.pathname, answer: () => done(new Response(JSON.stringify(body ?? { error: "no door" }), { status: body ? 200 : 404 })) });
+          }),
+      ),
+    );
+    return {
+      out,
+      asked: (path: string) => out.filter((o) => o.path === path).length,
+      /** The reads out of this door answered, or of every door. */
+      answer: async (path?: string) => {
+        const all = out.splice(0);
+        out.push(...all.filter((o) => path !== undefined && o.path !== path));
+        for (const o of all) if (path === undefined || o.path === path) o.answer();
+        await settle(10);
+      },
+    };
+  }
+  const draw = (caps: Capabilities = caps7a(DOORS, GRANTS)) => act(() => root.render(<DataPage caps={caps} install={null} onChanged={() => undefined} />));
+  const leave = () => {
+    act(() => root.unmount());
+    root = createRoot(host);
+  };
+  const names = (grid: string) => [...host.querySelectorAll(`.dp-grid.${grid} .dp-pick`)].map((b) => b.textContent);
+  const more = ds("ward-n", 11);
+
+  it("draws both lists, every summary and the chosen card at once on a second visit, nothing answered yet, then takes the fresh answers in place", async () => {
+    await page();
+    /** Both bands as drawn, card by card, and which dataset's detail stands under them. */
+    const drawn = () => [host.querySelector(".dp-grid.datasets")!.outerHTML, host.querySelector(".dp-grid.cohorts")!.outerHTML, host.querySelector(".dp-detail-name")?.textContent ?? null];
+    const first = drawn();
+    expect(text()).not.toContain("Reading where it is");
+    expect(host.querySelector(".dp-detail")).not.toBeNull();
+    leave();
+    // the second visit: the engine answers nothing yet, and says something else once it does
+    const renamed: Cohort[] = [...cohorts, { ...cohorts[0], name: "another-cohort" }];
+    const e = slow([done, looked, loose, more], renamed);
+    draw();
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    expect(drawn()).toEqual(first);
+    expect(host.querySelector(".dp-detail")).not.toBeNull();
+    // the summaries with them: no card and no detail says it is still reading where the dataset is
+    expect(text()).not.toContain("Reading where it is");
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c"]);
+    // all three are read again behind what is drawn
+    await settle();
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts"), e.out.filter((o) => o.path.endsWith("/summary") && o.path.startsWith("/api/datasets/")).length]).toEqual([1, 1, 3]);
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    // what is open and chosen stays as the answers land, on the cards that were drawn
+    const was = card("ward-f");
+    const picked = ["ward-f", "study-big"].find((name) => !card(name).classList.contains("on"))!;
+    act(() => (card(picked).querySelector(".dp-pick") as HTMLButtonElement).click());
+    expect(card(picked).classList.contains("on")).toBe(true);
+    const chosen = host.querySelector(".dp-detail")!;
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c", "ward-n"]);
+    expect(names("cohorts")).toContain("another-cohort");
+    expect(card("ward-f")).toBe(was);
+    expect(host.querySelector(".dp-detail")).toBe(chosen);
+    expect(card(picked).classList.contains("on")).toBe(true);
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    // and the dataset new to the list has its summary read
+    expect(e.asked("/api/datasets/ward-n/summary")).toBe(1);
+  });
+
+  it("waits on a first visit only, and keeps an answer that comes after the page went", async () => {
+    const e = slow([done, looked]);
+    draw();
+    await settle();
+    expect(host.querySelector(".wait-panel")?.textContent).toContain("reading the datasets");
+    // the person goes before anything answered
+    leave();
+    await e.answer();
+    slow([done, looked]);
+    draw();
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    expect(names("datasets")).toEqual(["ward-f", "study-big"]);
+    expect(names("cohorts").length).toBe(cohorts.length);
+  });
+
+  it("never lands a slow older answer over a newer one", async () => {
+    // the first visit's reads stay out
+    const old = slow([done]);
+    draw();
+    await settle();
+    leave();
+    // the second visit's are answered first
+    const now = slow([done, looked, more]);
+    draw();
+    await settle();
+    await now.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    // then the first visit's answers come, older than what is kept
+    await old.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(sourcesKept.get(whoOf(caps7a(DOORS, GRANTS)))[LIST].map((d) => d.name)).toEqual(["ward-f", "study-big", "ward-n"]);
+    leave();
+    slow([]);
+    draw();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+  });
+
+  it("keeps what the page reads again after it did something", async () => {
+    let listed = [done, looked];
+    let made: Cohort[] = cohorts;
+    await page({
+      route: (c) => {
+        const path = new URL(c.url, "http://x").pathname;
+        if (c.method === "POST" && path === "/api/cohorts") return { status: 201, body: { name: "fresh" } };
+        if (c.method === "GET" && path === "/api/sources") return { status: 200, body: { count: listed.length, window_days: 30, sources: listed, rates: null } };
+        if (c.method === "GET" && path === "/api/cohorts") return { status: 200, body: made };
+        return undefined;
+      },
+    });
+    expect(names("datasets")).toEqual(["ward-f", "study-big"]);
+    // a cohort made from the page's head: the page reads everything again, as after anything it did
+    listed = [done, looked, more];
+    made = [...cohorts, { ...cohorts[0], name: "fresh" }];
+    act(() => (host.querySelector(".data-head .button.secondary") as HTMLButtonElement).click());
+    const input = document.querySelector<HTMLInputElement>('dialog input[placeholder="ms-followup"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "fresh");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => [...document.querySelectorAll<HTMLButtonElement>("dialog button")].find((b) => b.textContent === "Make the cohort")!.click());
+    await settle(10);
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(names("cohorts")).toContain("fresh");
+    // and the next visit draws what those reads brought
+    leave();
+    slow([]);
+    draw();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(names("cohorts")).toContain("fresh");
+  });
+
+  it("shows another account nothing of what the first one's page kept, nor a person signed out, nor one whose grants changed", async () => {
+    await page();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c"]);
+    const others: ((c: Capabilities) => void)[] = [
+      (c) => {
+        c.person.subject = "birgit";
+        c.engine!.principal = "birgit";
+      },
+      (c) => void (c.desk.signed_in = false),
+      (c) => void (c.person.grants = c.person.grants.filter((g) => g !== "data:work")),
+    ];
+    for (const change of others) {
+      leave();
+      forgetData();
+      await page();
+      leave();
+      const other = caps7a(DOORS, GRANTS);
+      change(other);
+      const e = slow([more]);
+      draw(other);
+      expect(host.querySelector(".wait-panel")?.textContent).toContain("reading the datasets");
+      expect(text()).not.toMatch(/ward-f|study-big|ward-c|ms-followup/);
+      // and what the other one reads is theirs: the first, back, is shown none of it
+      await settle();
+      await e.answer();
+      expect(names("datasets")).toEqual(["ward-n"]);
+      leave();
+      slow([]);
+      draw();
+      expect(host.querySelector(".wait-panel")).not.toBeNull();
+      expect(text()).not.toContain("ward-n");
+    }
+  });
+
+  it("takes up the other account in a page that stays open, and reads for it", async () => {
+    await page();
+    const other = caps7a(DOORS, GRANTS);
+    other.person.subject = "birgit";
+    const e = slow([more]);
+    draw(other);
+    expect(text()).not.toMatch(/ward-f|study-big|ward-c/);
+    expect(host.querySelector(".wait-panel")).not.toBeNull();
+    await settle();
+    await e.answer();
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-n"]);
+    expect(text()).not.toContain("Reading where it is");
+  });
+});
+
 describe("the shell's reads of the capabilities (2026-11-12)", () => {
   const lists = (e: { calls: Call[] }) => e.calls.map((c) => new URL(c.url, "http://x").pathname).filter((p) => p === "/api/sources" || p === "/api/cohorts");
   const again = (caps: Capabilities) => {
@@ -1101,6 +1302,8 @@ describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
     expect(primary().map((b) => b.textContent)).toEqual(["Sort"]);
     expect(card("ward-s").querySelector(".dp-line")?.textContent).not.toBe("The last read stopped part way");
     act(() => root.unmount());
+    // a page drawn as in a new tab: nothing kept from the one before
+    forgetData();
     root = createRoot(host);
     const reading = ds("ward-s", 9, { ...stopped, digests: { count: 2, first: null, last: null, recent: [{ ...cut, id: 92, state: "running", finished_at: null }, cut] } });
     await page({ list: [reading] });

@@ -22,6 +22,7 @@ import { button, caps7a, dialogs, engine, radio, settle as settleReal, type Call
 import { GRANTS } from "../grants";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
+import { forgetData } from "./kept";
 import type { Dataset } from "./datasets";
 import { policyKept } from "./policy";
 import type { DatasetSummary, SummaryStep } from "./summary";
@@ -47,6 +48,7 @@ beforeEach(() => {
   root = createRoot(host);
 });
 afterEach(() => {
+  forgetData();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -675,6 +677,8 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(button(panel, "Pseudonymise and sort at least 7,544 files")).not.toBeNull();
     expect(button(panel, "Pseudonymise and sort 7,544 files")).toBeNull();
     act(() => root.unmount());
+    // a page drawn as in a new tab: nothing kept from the one before
+    forgetData();
     root = createRoot(host);
     // the same dataset counted whole says no "at least" anywhere
     const whole = dataset({ ...partial, trees: { ...partial.trees!, originals: { ...partial.trees!.originals!, partial: false } } });
@@ -977,6 +981,8 @@ describe("the pseudonymise step while the dataset's summary is not read yet (202
   const offers = () => [...host.querySelectorAll("button")].map((b) => b.textContent ?? "").filter((t) => t.startsWith("Pseudonymise and sort"));
   const again = () => {
     act(() => root.unmount());
+    // a page drawn as in a new tab: nothing kept from the one before
+    forgetData();
     root = createRoot(host);
   };
 

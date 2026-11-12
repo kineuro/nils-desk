@@ -18,6 +18,7 @@ import type { ChainedJob } from "../ask/client";
 import { DoorError } from "../ask/client";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
+import { forgetData } from "./kept";
 import { packPicks, type Dataset, type SourcesAnswer } from "./datasets";
 import { SetIdsDialog, SortFilesDialog } from "./FinishDataset";
 import { moveAskedOf } from "./layout";
@@ -35,6 +36,7 @@ beforeEach(() => {
   root = createRoot(host);
 });
 afterEach(() => {
+  forgetData();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();

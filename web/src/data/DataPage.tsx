@@ -11,7 +11,7 @@
 // one primary button. A card is chosen on arrival, the first that needs a
 // person, so the next step is always on screen.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -21,11 +21,12 @@ import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
-import { useKept, useReads } from "../ui/kept";
+import { useKept, useReads, useShelf } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { AddDataset } from "./AddDataset";
 import { CohortDetail } from "./CohortDetail";
 import { cohorts as cohortDoors, type Cohort } from "./cohorts";
+import { cohortsKept, keepSummary, LIST, sourcesKept, summariesKept, takeData, whoOf } from "./kept";
 import { DatasetDetail } from "./DatasetDetail";
 import { jobs as jobsDoor, packFor, packPicks, sources, type Dataset, type Layout } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
@@ -51,7 +52,6 @@ import {
   summaries,
   TONE,
   countWords,
-  isPending,
   type CountProgress,
   type DatasetSummary,
   type Part,
@@ -91,9 +91,6 @@ function without<T>(r: Record<string, T>, key: string): Record<string, T> {
 export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name: string } | null;
 
 const n = (v: number) => v.toLocaleString("en-US");
-
-/** The one key of a door that answers a whole list. */
-const LIST = "list";
 
 /** What the address chooses: a cohort or a dataset named after the question mark, or the dataset it names (#data/datasets/<name>, and its viewer's /view). */
 export function chosenOf(dataset: string | null | undefined, query: Record<string, string> | undefined): Chosen {
@@ -136,13 +133,30 @@ export function DataPage({
   step?: string | null;
   query?: Record<string, string>;
 }) {
-  const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [cohortList, setCohortList] = useState<Cohort[] | null>(null);
+  // 2026-11-12: the lists and the summaries are what the page read last, kept between visits for this person: an
+  // arrival draws them at once and reads them again behind, and only the first visit in a tab waits (kept.ts)
+  const who = whoOf(caps);
+  const [since] = useState(() => Date.now());
+  const keptSources = useShelf(sourcesKept, who);
+  const keptCohorts = useShelf(cohortsKept, who);
+  const keptSummaries = useShelf(summariesKept, who);
+  /** Why the datasets could not be read, where they could not and none are kept. */
+  const [sourcesWhy, setSourcesWhy] = useState<string | null>(null);
+  const listKept = keptSources[LIST];
+  const load: Load = listKept ? { kind: "ready", list: listKept } : sourcesWhy !== null ? { kind: "failed", why: sourcesWhy } : { kind: "loading", since };
   /** Why the cohorts could not be read, where they could not. */
   const [cohortsWhy, setCohortsWhy] = useState<string | null>(null);
-  const [sums, setSums] = useState<Record<string, DatasetSummary>>({});
+  const sums = useMemo(() => {
+    const all: Record<string, DatasetSummary> = {};
+    for (const [name, k] of Object.entries(keptSummaries)) if (k.sum) all[name] = k.sum;
+    return all;
+  }, [keptSummaries]);
   /** 2026-11-05: how far the first count of a dataset never counted has got, by its name, while the engine answers it without counts. */
-  const [firsts, setFirsts] = useState<Record<string, CountProgress>>({});
+  const firsts = useMemo(() => {
+    const all: Record<string, CountProgress> = {};
+    for (const [name, k] of Object.entries(keptSummaries)) if (k.first) all[name] = k.first;
+    return all;
+  }, [keptSummaries]);
   /** Why a dataset's summary could not be read, by its name. */
   const [sumsWhy, setSumsWhy] = useState<Record<string, string>>({});
   const [chosen, setChosen] = useState<Chosen>(() => chosenOf(dataset, query));
@@ -159,6 +173,8 @@ export function DataPage({
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
   const readsCohorts = may(caps, "data:see") && served(caps, "GET /api/cohorts");
+  // a list not read is said, never drawn as an empty one
+  const cohortList: Cohort[] | null = readsCohorts ? (keptCohorts[LIST] ?? (cohortsWhy !== null ? [] : null)) : null;
   const summarises = maySummarise(caps);
 
   // the viewer's dataset, or what the address names, is the one chosen
@@ -173,38 +189,49 @@ export function DataPage({
 
   // 2026-10-17: each list and each dataset's summary is read once at a time; one asked while its read is out waits for that answer
   // (a summary of 30 to 40 s was asked every 5 s, ten of them out at once), and an answer the page let go of never lands
+  // 2026-11-12: an answer is kept as it comes, numbered by when its read was sent: one that comes after the page went
+  // is there for the next visit, and a slow one from a visit before never lands over a newer one
   const sourceReads = useReads(
-    () => sources.list(),
-    (_, r) => setLoad({ kind: "ready", list: r.sources }),
-    (_, e) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: (e as Error).message })),
+    () => {
+      const sent = sourcesKept.sent();
+      return sources.list().then((r) => {
+        sourcesKept.land(who, LIST, sent, r.sources);
+        return r;
+      });
+    },
+    () => setSourcesWhy(null),
+    // the datasets kept stay drawn
+    (_, e) => setSourcesWhy((e as Error).message),
   );
   const cohortReads = useReads(
-    () => cohortDoors.list(),
-    (_, all) => {
-      setCohortList(all.filter((c) => !c.retired_at));
-      setCohortsWhy(null);
+    () => {
+      const sent = cohortsKept.sent();
+      return cohortDoors.list().then((all) => {
+        cohortsKept.land(
+          who,
+          LIST,
+          sent,
+          all.filter((c) => !c.retired_at),
+        );
+        return all;
+      });
     },
-    (_, e) => {
-      // a list not read is said, never drawn as an empty one
-      setCohortList((was) => was ?? []);
-      setCohortsWhy(messageOf(e));
-    },
+    () => setCohortsWhy(null),
+    (_, e) => setCohortsWhy(messageOf(e)),
   );
   // each dataset's summary, for the steps on its card and its detail; one that cannot be read is said so
   const summaryReads = useReads(
-    (name) => summaries.read(name),
-    (name, s) => {
-      // 2026-11-05: a dataset never counted is answered at once with how far its first count has got, and read again until it lands
-      if (isPending(s)) setFirsts((was) => ({ ...was, [name]: s.count }));
-      else {
-        setSums((was) => ({ ...was, [name]: s }));
-        setFirsts((was) => (name in was ? without(was, name) : was));
-      }
-      setSumsWhy((was) => (name in was ? without(was, name) : was));
+    (name) => {
+      const sent = summariesKept.sent();
+      return summaries.read(name).then((s) => {
+        // 2026-11-05: a dataset never counted is answered at once with how far its first count has got, and read again until it lands
+        keepSummary(who, name, sent, s);
+        return s;
+      });
     },
+    (name) => setSumsWhy((was) => (name in was ? without(was, name) : was)),
     (name, e) => {
-      setSums((was) => (name in was ? without(was, name) : was));
-      setFirsts((was) => (name in was ? without(was, name) : was));
+      summariesKept.drop(who, name);
       setSumsWhy((was) => ({ ...was, [name]: messageOf(e) }));
     },
   );
@@ -212,12 +239,16 @@ export function DataPage({
   // 2026-11-12: the lists are read on arrival, and again only when what this person may read changed. This depended
   // on the capabilities object, which the shell made anew with each of its reads, every 15 s: an open page asked for
   // both lists that often for as long as it stood (313 and 315 requests in 100 minutes).
+  // And each arrival reads them from now, behind what is kept: a read still out was sent for whoever the page stood for before.
   const readsPlaces = served(caps, "GET /api/places");
   useEffect(() => {
-    sourceReads.read(LIST);
-    if (readsCohorts) cohortReads.read(LIST);
+    takeData(who);
+    setSourcesWhy(null);
+    setCohortsWhy(null);
+    sourceReads.fresh(LIST);
+    if (readsCohorts) cohortReads.fresh(LIST);
     if (readsPlaces) void placesKept.ensure();
-  }, [sourceReads, cohortReads, readsCohorts, readsPlaces]);
+  }, [sourceReads, cohortReads, readsCohorts, readsPlaces, who]);
 
   // a root is where folders live, never a dataset
   const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];
@@ -225,14 +256,16 @@ export function DataPage({
 
   // a listed dataset's summary is read once it is listed; a dataset gone from the list takes its summary with it, and a read of it still out answers to nobody
   const listed = useRef<Set<string>>(new Set());
+  const listRead = load.kind === "ready";
   useEffect(() => {
     const now = new Set(names.split("\n").filter(Boolean));
     for (const name of listed.current) if (!now.has(name)) summaryReads.drop(name);
     listed.current = now;
     if (summarises) for (const name of now) summaryReads.ensure(name);
-    setSums((was) => (Object.keys(was).every((k) => now.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => now.has(k)))));
+    // while the list itself is not read, nothing says which datasets are gone
+    if (listRead) summariesKept.only(who, now);
     setSumsWhy((was) => (Object.keys(was).every((k) => now.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => now.has(k)))));
-  }, [names, summarises, summaryReads]);
+  }, [names, summarises, summaryReads, listRead, who]);
 
   /** Everything read again from now: a job started or ended, or the page did something. */
   const readAgain = () => {
@@ -290,8 +323,9 @@ export function DataPage({
   };
 
   // on arrival, the first card that needs a person is chosen; a person's own choice stands
+  // (before the page is painted, so an arrival that draws what is kept draws its chosen card with it)
   const cohortsRead = !readsCohorts || cohortList !== null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (picked.current || load.kind !== "ready" || !cohortsRead) return;
     picked.current = true;
     setChosen(firstChoice(list, whyOf, cohortList ?? [], sums));
