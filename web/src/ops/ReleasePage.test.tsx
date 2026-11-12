@@ -115,6 +115,21 @@ describe("the Release page", () => {
     }
   });
 
+  it("says under a release's name what it named its subjects by and how many, and nothing where they kept their subject codes", () => {
+    const row = rows[1];
+    const named = draw(caps(), [{ ...row, name_by: ["study-id", "pacs-id"], names: { types: [{ type: "study-id", subjects: 12 }, { type: "pacs-id", subjects: 3 }], code: 1, chosen: 2 } }]);
+    // a row of its own under the release's, as wide as the table (here without the acts column)
+    expect(named).toContain(`<tr class="named"><td><b class="path">${row.name}</b></td>`);
+    expect(named).toContain('</tr><tr class="named-under"><td colSpan="11" class="meta named-by">subjects named by Study ID 12 · Pacs id 3 · subject code 1</td></tr>');
+    // an engine from before the setting sends neither field; one with it sends null for a release that kept the subject codes
+    for (const unset of [{}, { name_by: null, names: null }, { name_by: [], names: null }]) {
+      const html = draw(caps(), [{ ...row, ...unset }]);
+      expect(html).not.toContain("named by");
+      expect(html).not.toContain("named-by");
+    }
+    expect(html).not.toContain("named by");
+  });
+
   it("offers as a card's answer only a complete stack answer the person may release", () => {
     const grants = ["release:work"];
     expect(releasableCards([handle()], record, 4, grants).map((c) => c.name)).toEqual(["north T1w and FLAIR"]);

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { DoorError } from "../ask/client";
-import { plainError } from "./plain";
+import { knownError, plainError } from "./plain";
 
 describe("a refusal in plain words", () => {
   it("maps what the desk knows to one short line and keeps the engine's words for the \"?\"", () => {
@@ -34,5 +34,41 @@ describe("a refusal in plain words", () => {
       expect(p.detail.length).toBeGreaterThan(0);
     }
     expect(plainError("exit 3", "This job failed.")).toEqual({ words: "This job failed.", detail: "exit 3" });
+  });
+
+  it("says a release's refusal to name its subjects by an ID type in one line (the engine's words as its doors say them)", () => {
+    const cases: [DoorError, string][] = [
+      [
+        new DoorError(409, {
+          error:
+            "the release names its subjects by study-id, then pacs-id and cannot name them all. 2 subjects hold several values of the type that would name them: 7c1d0e5a93b2f468 (2 of study-id), e40b6a1f8d3c2957 (3 of study-id). Say which value names each (--name-choice CODE=VALUE or a --name-choices file on the command line, name_choices in a request); the plan lists the values (nils release --name-plan, POST /api/releases/names). 1 name would be shared once cleaned to letters and digits, so two subjects would be written into one folder: 7c1d0e5a93b2f468 (by study-id) and e40b6a1f8d3c2957 (by its code). Nothing was written.",
+          disclosure: "gated",
+        }),
+        "Some subjects cannot be named yet.",
+      ],
+      [new DoorError(403, { error: "naming subjects by an ID type that identifies a person needs detail sensitive; astrid sees plain" }), "Naming by this ID type needs someone who may see IDs."],
+      [new DoorError(403, { error: "naming subjects by an ID type that identifies a person needs data:work; astrid holds release:work" }), "Naming by this ID type needs someone who may see IDs."],
+      [new DoorError(400, { error: "name by personnummer: a personnummer is never kept, not even sealed, so it can name no subject. Choose an ID type that keeps its values (nils linkage id-type list). Nothing was written." }), "This ID type keeps no ID, so it names no subject."],
+      [new DoorError(400, { error: "name by reserve-number: an ID of this type is never kept, not even sealed, so it can name no subject. Choose an ID type that keeps its values (nils linkage id-type list). Nothing was written." }), "This ID type keeps no ID, so it names no subject."],
+      [new DoorError(400, { error: "name by ward-id: no ID type is named so. The types that keep values are pacs-id, study-id. Nothing was written." }), "There is no such ID type."],
+      [new DoorError(400, { error: "name by study-id: no subject holds a kept value of study-id, so it would name nobody and every subject would keep its code. Import the IDs first (nils linkage import), or take the type out of the list. Nothing was written." }), "No subject holds an ID of this type."],
+      [new DoorError(400, { error: "name by study-id: the type is in the list twice. Name each type once, in the order they are tried. Nothing was written." }), "An ID type is in the list twice."],
+      [new DoorError(400, { error: "name_by is a list of ID type names, in the order they are tried" }), "The ID types to name by could not be read."],
+      [new DoorError(400, { error: "name_choices says which value names a subject, and the release names by no ID type: give name_by, or leave name_choices out. Nothing was written." }), "An ID was chosen and no ID type names the subjects."],
+      [new DoorError(400, { error: "name_choices is a list of {subject, value}: a subject code and the value that names that subject. Nothing was written." }), "The chosen IDs could not be read."],
+      [new DoorError(400, { error: "the choice for 7c1d0e5a93b2f468: the release's selection holds no subject with that code. A choice names a subject by its subject code. Nothing was written." }), "An ID was chosen for a subject this release does not hold."],
+      [new DoorError(400, { error: "the choice for 7c1d0e5a93b2f468: two different values were given. Give one. Nothing was written." }), "Two IDs were chosen for one subject."],
+      [new DoorError(400, { error: "the choice for 7c1d0e5a93b2f468: the subject holds no such value of study-id, the type that names it. The plan lists the values it holds (nils release --name-plan, POST /api/releases/names). Nothing was written." }), "A chosen ID is not one the subject holds. Choose again."],
+      [new DoorError(400, { error: "the choice for 7c1d0e5a93b2f468: the subject holds one value of study-id, the type that names it, and the choice is another. Leave the choice out. Nothing was written." }), "A subject needs no choice any more. Choose again."],
+      [new DoorError(400, { error: "the choice for 7c1d0e5a93b2f468: the subject holds no value of study-id, pacs-id that can name it, so it keeps its code. Leave the choice out. Nothing was written." }), "A subject needs no choice any more. Choose again."],
+    ];
+    for (const [e, words] of cases) {
+      // the engine's own words stay behind the "?"
+      expect(knownError(e)).toEqual({ words, detail: e.message });
+      expect(plainError(e).words).toBe(words);
+    }
+    // what the desk has no line for is left to the place that shows it
+    expect(knownError(new DoorError(400, { error: "ms-a: no cohort is named so" }))).toBeNull();
+    expect(knownError(new DoorError(403, { error: "this needs release:work" }))).toBeNull();
   });
 });

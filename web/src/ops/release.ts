@@ -71,6 +71,14 @@ export interface ReleaseForm {
   expert?: Expert;
   /** The expert options the engine reads (`expertOffered`). */
   offered?: readonly string[];
+  /**
+   * The ID types that name the subjects, in the order they are tried, sent
+   * only where the person chose one: absent, every subject keeps its subject
+   * code and the body is the one an engine before the setting reads.
+   */
+  name_by?: readonly string[];
+  /** The ID a person chose for a subject holding several of the type that names it, by subject code; sent only beside `name_by`. */
+  name_choices?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -205,6 +213,15 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   const expert = expertBody(f.expert, f.layout, f.offered ?? []);
   if (!expert.ok) return { ok: false, why: expert.why };
   Object.assign(body, expert.body);
+  // only a choice the person made is named: no type, and the subjects keep their subject codes as before
+  const nameBy = (f.name_by ?? []).map((t) => t.trim()).filter(Boolean);
+  if (nameBy.length > 0) {
+    body.name_by = nameBy;
+    const choices = Object.entries(f.name_choices ?? {})
+      .filter(([, value]) => value !== "")
+      .map(([subject, value]) => ({ subject, value }));
+    if (choices.length > 0) body.name_choices = choices;
+  }
   if (src.kind === "handle") {
     if (!src.handle) return { ok: false, why: "a handle" };
     if (src.handle.grain !== "stack") return { ok: false, why: `a release reads stacks; this handle is at the ${src.handle.grain} grain. Set the answer set to a stack set and run again` };
@@ -236,6 +253,22 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   }
   if (parts.length === 0) return { ok: false, why: "a cohort, a dataset, subjects or an axis value to select by" };
   return { ok: true, body, summary: parts.join("; ") };
+}
+
+/**
+ * The body the names rehearsal reads: the release's own, so the selection it
+ * reads is the one the job would read. The rehearsal needs neither a name nor
+ * a place to write, so a form still missing one is rehearsed without it; null
+ * where the form names by no ID type or has no selection yet.
+ */
+export function rehearsalBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]): Json | null {
+  if ((f.name_by ?? []).length === 0) return null;
+  const built = releaseBody(src, { ...f, name: f.name.trim() || "-", out: f.out.trim() || "-" }, stacks);
+  if (!built.ok) return null;
+  const body: Json = { ...built.body };
+  if (!f.name.trim()) delete body.name;
+  if (!f.out.trim()) delete body.out;
+  return body;
 }
 
 /** A comma or newline separated list, trimmed, empties dropped. */

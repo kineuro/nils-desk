@@ -15,6 +15,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { closedWords, handovers, type Handover } from "./handovers";
+import { NamedBy } from "./ReleaseNames";
 
 export function PasswordOnce({ handover, onClose }: { handover: number; onClose: () => void }) {
   const [password, setPassword] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export function PasswordOnce({ handover, onClose }: { handover: number; onClose:
 }
 
 /** A release version's handovers: where each went, how it is kept closed, and its password for whoever may show it. */
-export function HandoversDialog({ release: r, onClose }: { release: Pick<Release, "name" | "version">; onClose: () => void }) {
+export function HandoversDialog({ release: r, onClose }: { release: Pick<Release, "name" | "version" | "name_by" | "names">; onClose: () => void }) {
   const [rows, setRows] = useState<Handover[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [showing, setShowing] = useState<number | null>(null);
@@ -106,6 +107,7 @@ export function HandoversDialog({ release: r, onClose }: { release: Pick<Release
         </div>
       }
     >
+      <NamedBy release={r} />
       {rows === null && failed === null && <Wait phase="reading the handovers" since={since} />}
       {failed && <p className="warn">{failed}</p>}
       {rows !== null && rows.length === 0 && <p className="meta">Not handed over.</p>}

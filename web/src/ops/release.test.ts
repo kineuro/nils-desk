@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { HandleRow } from "../ask/client";
-import { confirmed, confirmName, DATASETS_OWN, list, overrideNote, releaseBody, stackIds } from "./release";
+import { confirmed, confirmName, DATASETS_OWN, list, overrideNote, rehearsalBody, releaseBody, stackIds, type ReleaseSource } from "./release";
 
 const stackHandle: HandleRow = {
   id: 75, name: null, grain: "stack", row_count: 250, content_hash: "x", principal: "anna@ward-3", actor: {}, created_at: "", epoch: 1, pack_version: "0.1.1",
@@ -72,6 +72,38 @@ describe("the release form", () => {
     // the descriptive tree is v0's grammar whatever is asked, and the engine refuses minimal beside it
     expect(bodyOf("descriptive", "minimal")).not.toHaveProperty("naming");
     expect(bodyOf(undefined, "minimal")).not.toHaveProperty("naming");
+  });
+  it("names the ID types the subjects are named by only where a person added one, and a chosen ID only beside them", () => {
+    const src: ReleaseSource = { kind: "hand", cohorts: ["ms-a"] };
+    const bodyOf = (f: Parameters<typeof releaseBody>[1]) => {
+      const r = releaseBody(src, f, []);
+      if (!r.ok) throw new Error(r.why);
+      return r.body;
+    };
+    // the subject code alone is the engine's own, so nothing is sent and an engine from before the choice keeps working
+    expect(bodyOf({ name: "s", out: "/o" })).toEqual({ name: "s", out: "/o", cohorts: ["ms-a"] });
+    expect(bodyOf({ name: "s", out: "/o", name_by: [], name_choices: { c0de: "AB_01" } })).toEqual({ name: "s", out: "/o", cohorts: ["ms-a"] });
+    // the types in the order they are tried
+    expect(bodyOf({ name: "s", out: "/o", name_by: ["study-id", "pacs-id"] })).toEqual({ name: "s", out: "/o", cohorts: ["ms-a"], name_by: ["study-id", "pacs-id"] });
+    // a subject no ID was chosen for is not sent
+    expect(bodyOf({ name: "s", out: "/o", name_by: ["study-id"], name_choices: { c0de: "AB_01", d1ce: "" } })).toEqual({
+      name: "s",
+      out: "/o",
+      cohorts: ["ms-a"],
+      name_by: ["study-id"],
+      name_choices: [{ subject: "c0de", value: "AB_01" }],
+    });
+  });
+  it("rehearses the names with the body the release would send, before it has a name or a folder", () => {
+    const src: ReleaseSource = { kind: "hand", cohorts: ["ms-a"] };
+    // nothing to rehearse while every subject keeps its subject code, or nothing is selected
+    expect(rehearsalBody(src, { name: "s", out: "/o" }, [])).toBeNull();
+    expect(rehearsalBody({ kind: "hand" }, { name: "s", out: "/o", name_by: ["study-id"] }, [])).toBeNull();
+    const form = { name: "s", out: "/o", layout: "bids", name_by: ["study-id"], name_choices: { c0de: "AB_01" } };
+    const sent = releaseBody(src, form, []);
+    expect(rehearsalBody(src, form, [])).toEqual(sent.ok && sent.body);
+    // the engine reads the kept choices of a release by its name, and needs no folder
+    expect(rehearsalBody(src, { ...form, name: " ", out: "" }, [])).toEqual({ layout: "bids", cohorts: ["ms-a"], name_by: ["study-id"], name_choices: [{ subject: "c0de", value: "AB_01" }] });
   });
   it("a card's answer with no rows read here is sent as its handle, which the door reads itself", () => {
     const r = releaseBody({ kind: "handle", handle: stackHandle }, { name: "sept", out: "/srv/out/sept" }, []);
