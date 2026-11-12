@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.14] - 2026-11-12
+
+The fourteenth desk beta draws the Data page at once, gives the grid its own viewer and lists subjects in the order of what they are shown by.
+
 ### Changed
 
 - The Data page draws at once. The lists of datasets and cohorts and each dataset's summary are kept for the life of the browser tab and drawn first, then read again behind; the datasets are asked with `at_once=1`, so a dataset never counted shows its card with "counting" in place of holding the page; a list that is being counted is followed every few seconds until its counts land, and otherwise read again when the registry's epoch moves, not every 15 seconds.
