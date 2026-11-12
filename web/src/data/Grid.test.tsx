@@ -69,7 +69,7 @@ const page = (subjects: unknown[], over: Record<string, unknown> = {}) => ({
   scope: { kind: "dataset", name: "ms-a", id: 7 },
   detail: "quasi",
   show: "code",
-  order: "look",
+  order: "id",
   totals: { subjects: 3, visits: 4, scans: 30, look: 3 },
   matched: subjects.length,
   count: subjects.length,
@@ -260,7 +260,7 @@ describe("the dataset viewer's grid", () => {
 
   it("shows the subjects as folders with their counts, their facts and what to look at, and no pictures", async () => {
     await open("#data/datasets/ms-a/view");
-    expect(asked("/api/datasets/ms-a/subjects")).toEqual(["/api/datasets/ms-a/subjects?limit=60&order=look&show=code"]);
+    expect(asked("/api/datasets/ms-a/subjects")).toEqual(["/api/datasets/ms-a/subjects?limit=60&order=id&show=code"]);
     expect(el.querySelector(".vw-title h1")?.textContent).toBe("ms-a");
     expect(el.querySelector(".vw-title .vw-sum")?.textContent).toBe("3 subjects · 4 visits · 30 scans · 3 need a look");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-a1", "sub-b2", "sub-c3"]);
@@ -283,7 +283,7 @@ describe("the dataset viewer's grid", () => {
     act(() => chip.click());
     await settle();
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&filter=look");
-    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=look&show=code&filter=look");
+    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=id&show=code&filter=look");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-a1"]);
     expect(el.querySelector(".vw-foot")?.textContent).toBe("1 of the 1 subject with scans to look at · Enter opens · / searches");
     expect(chip.getAttribute("aria-pressed")).toBe("true");
@@ -304,7 +304,7 @@ describe("the dataset viewer's grid", () => {
     await settle();
     // the search is held in memory, never in the address: what is typed can be an identifier
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid");
-    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=look&show=code&q=b2");
+    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=id&show=code&q=b2");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-b2"]);
     // Esc in the search clears it first
     key("Escape");
@@ -535,7 +535,7 @@ describe("the dataset viewer's grid", () => {
 
   it("opens a cohort's members the same way", async () => {
     await open("#data/cohorts/ms/view");
-    expect(asked("/api/cohorts/ms/subjects")).toEqual(["/api/cohorts/ms/subjects?limit=60&order=look&show=code"]);
+    expect(asked("/api/cohorts/ms/subjects")).toEqual(["/api/cohorts/ms/subjects?limit=60&order=id&show=code"]);
     expect(text(".vw-crumbs a")).toEqual(["Cohorts"]);
     expect(el.querySelector(".vw-card")?.getAttribute("href")).toBe("#data/cohorts/ms/view?mode=grid&subject=1");
   });

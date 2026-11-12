@@ -45,6 +45,7 @@ import {
   goUp,
   heldValue,
   hold,
+  ID_ORDER,
   inDialog,
   keep,
   kept,
@@ -75,6 +76,7 @@ import {
   subjectFacts,
   subjectFilters,
   subjectsKey,
+  SUBJECT_CODE_WORDS,
   takeSearch,
   toggled,
   VISIT_FILTERS,
@@ -106,9 +108,10 @@ interface LevelProps {
   go: Go;
 }
 
-const ORDERS = ["look", "code", "visits", "scans"] as const;
+// the order of what subjects are shown by comes first and is the default (2026-11-12); its words are the shown type's own
+const ORDERS = [ID_ORDER, "look", "visits", "scans"] as const;
 type Order = (typeof ORDERS)[number];
-const ORDER_WORDS: Record<Order, string> = { look: "Most to look at first", code: "Code", visits: "Most visits", scans: "Most scans" };
+const ORDER_WORDS: Record<Exclude<Order, typeof ID_ORDER>, string> = { look: "Most to look at first", visits: "Most visits", scans: "Most scans" };
 const NAMINGS = ["date", "number", "days"] as const;
 type Naming = (typeof NAMINGS)[number];
 const NAMING_WORDS: Record<Naming, string> = { date: "Date", number: "Visit number", days: "Days from the first" };
@@ -324,7 +327,7 @@ function useSubjects(scope: Scope, ask: SubjectsAsk, onRefused: () => void) {
 
 function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
   const [show, setShow] = useShow();
-  const [order, setOrder] = useKept<Order>(KEPT.order, ORDERS, "look");
+  const [order, setOrder] = useKept<Order>(KEPT.order, ORDERS, ID_ORDER);
   const [naming, setNaming] = useKept<Naming>(KEPT.visits, NAMINGS, "date");
   const filterKey = view.filter.join(",");
   const ask = useMemo<SubjectsAsk>(() => ({ q: view.q, show, order, filter: view.filter }), [view.q, show, order, filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -435,6 +438,8 @@ function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
   const roles = (page?.facets.roles ?? []).map((r) => r.name);
   const options = showOptions(page?.facets.idTypes ?? []);
   if (!options.some((o) => o.value === show)) options.push({ value: show, label: show });
+  // the first order's words: what the subjects are shown by, as the choice beside it words it
+  const shownWords = options.find((o) => o.value === show)?.label ?? SUBJECT_CODE_WORDS;
   const t = page?.totals;
   const filtered = view.filter.length > 0 || view.q.trim() !== "";
   const phrase = filterPhrase(view.filter);
@@ -496,7 +501,7 @@ function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
           <select id="vw-order" className="vw-select" value={order} onChange={(e) => setOrder(e.target.value as Order)}>
             {ORDERS.map((v) => (
               <option key={v} value={v}>
-                {ORDER_WORDS[v]}
+                {v === ID_ORDER ? shownWords : ORDER_WORDS[v]}
               </option>
             ))}
           </select>
@@ -619,7 +624,7 @@ function useVisits(scope: Scope, subject: number, ask: { name: string; show: str
 
 /** The subjects before and after this one, in the order and filters the subjects level shows them. */
 function useAround(scope: Scope, view: ViewState, subject: number): { before: number | null; after: number | null } {
-  const ask: SubjectsAsk = { q: view.q, show: keptText(KEPT.show, "code"), order: kept(KEPT.order, ORDERS, "look"), filter: view.filter };
+  const ask: SubjectsAsk = { q: view.q, show: keptText(KEPT.show, "code"), order: kept(KEPT.order, ORDERS, ID_ORDER), filter: view.filter };
   const key = subjectsKey(scope, ask);
   const [page, setPage] = useState<SubjectsPage | null>(() => heldValue<SubjectsPage>(key));
   useEffect(() => {

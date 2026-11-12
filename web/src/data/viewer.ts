@@ -7,7 +7,7 @@
 // engine's doors and what they answer; and the words a card says. Subjects,
 // never people (Nima, 2026-10-09).
 
-import { door } from "../ask/client";
+import { door, DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -350,13 +350,41 @@ interface ScansAnswer {
   pictures?: unknown;
 }
 
+/**
+ * The order of what subjects are shown by (2026-11-12): their subject codes ascending, or the shown ID type's values
+ * in natural order, the subjects without one last. The default, since an order by what needs a look read as no order
+ * at all beside the names.
+ */
+export const ID_ORDER = "id";
+
+/** How long a refusal of `order=id` is believed: an engine updated under an open page is asked again after it. */
+export const ID_ORDER_REFUSED_FOR = 10 * 60_000;
+let idOrderRefused: number | null = null;
+
+/** Whether the engine's refusal is of the order's word: "order: id is not look, code, visits or scans". */
+const refusesOrder = (e: unknown) => e instanceof DoorError && e.status === 400 && e.message.startsWith("order:");
+
 export const viewerDoors = {
+  /**
+   * A page of subjects. An engine before `order=id` refuses the word, and neither its contract number nor its
+   * capabilities say which it is, so the refusal itself is what tells: the code's order is asked in its place, the
+   * same order wherever subjects are shown by their subject code, and the engine is not asked `id` again for a while.
+   */
   subjects: (scope: Scope, ask: SubjectsAsk, after: number | null = null): Promise<SubjectsPage> => {
-    const q = new URLSearchParams({ limit: String(SUBJECTS_PAGE), order: ask.order, show: ask.show });
-    if (ask.q.trim() !== "") q.set("q", ask.q.trim());
-    if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
-    if (after !== null) q.set("after", String(after));
-    return door<Json>("GET", `${paths(scope).subjects}?${q}`).then(subjectsOf);
+    const read = (order: string) => {
+      const q = new URLSearchParams({ limit: String(SUBJECTS_PAGE), order, show: ask.show });
+      if (ask.q.trim() !== "") q.set("q", ask.q.trim());
+      if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
+      if (after !== null) q.set("after", String(after));
+      return door<Json>("GET", `${paths(scope).subjects}?${q}`).then(subjectsOf);
+    };
+    if (ask.order !== ID_ORDER) return read(ask.order);
+    if (idOrderRefused !== null && Date.now() - idOrderRefused < ID_ORDER_REFUSED_FOR) return read("code");
+    return read(ID_ORDER).catch((e: unknown) => {
+      if (!refusesOrder(e)) throw e;
+      idOrderRefused = Date.now();
+      return read("code");
+    });
   },
   visits: (scope: Scope, subject: number, ask: { name: string; show: string; filter: string[] }): Promise<VisitsPage> => {
     const q = new URLSearchParams({ name: ask.name, show: ask.show });
@@ -748,7 +776,9 @@ export function step(spots: Spot[], at: number, key: "ArrowLeft" | "ArrowRight" 
 export const KEPT = {
   show: "nils.viewer.show",
   visits: "nils.viewer.visits",
-  order: "nils.viewer.order",
+  // a second key (2026-11-12): the order of what subjects are shown by became the default, and a choice kept under the
+  // first key, mostly the old default itself, would have held everybody on the old order; nothing reads the first key now
+  order: "nils.viewer.order.2",
   colour: "nils.viewer.colour",
   names: "nils.dataset-view.names",
 } as const;
@@ -814,6 +844,7 @@ export function forgetHeld(): void {
   searches.clear();
   downs = [];
   searchAsked = false;
+  idOrderRefused = null;
 }
 
 const scopeKey = (s: Scope) => `${s.kind}:${s.name}`;
