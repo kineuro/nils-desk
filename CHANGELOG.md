@@ -4,6 +4,29 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.12] - 2026-11-12
+
+The twelfth desk beta is the desk's half of one fix, met in production: a dataset of identified files that was declared with no identity rule had its PatientID read under a default type, which kept identifying IDs as values. Engine 1.0.0-beta.13 refuses such a dataset until a rule says what PatientID holds; the desk asks for it wherever a person meets that, in the words a dataset is asked when it is added. And **New release** gains **name subjects by**: the ID types tried in order to name a release's subjects, with the subject code always last, for an engine that names releases (1.0.0-beta.13).
+
+### Added
+
+- The pseudonymise step of a dataset with identified files and no identity rule asks what PatientID holds: an ID that is the same everywhere (personnummer, national ID) or a hospital or study ID of a type, with **Save** as its one button. Until it is answered the step offers no run, its chip, the dataset's card and the rail say **Needs what PatientID holds**, and **Read new files** is not offered. An account that may not change a dataset's rules is told who can.
+- **Sort the files** asks the same question when the entries are identified and the dataset has no rule yet: **Next** waits for the answer, and the move carries the rule.
+- On the Pseudonyms page a type's count says how many of its IDs keep a value where the engine counts them and the two differ (`25 IDs, none kept`, `1,200 IDs, 1,175 kept`), with what the rest are behind it: a keyed one-way lookup that recognises each when it arrives again.
+- **New release** has a row **name subjects by** in "How it leaves": the ID types tried in order, with **Subject code** always last and the only one until a person adds a type. The types offered are those the engine says keep at least one value; the study UID standing in for a missing ID, PatientID as a hospital wrote it (`patient-id`) and a subject code filed as an ID (`subject-code`) are never offered. Each chosen type is a tag with its own earlier, later and remove buttons, by pointer or keyboard.
+- With a type chosen, the form rehearses the names with the body the release would send: how many subjects each type names and how many keep their subject code, a choice for each subject that holds several IDs of the type that would name it, and the names two subjects would share once cleaned. **Release** waits until every subject has one name of its own, and the dialog's foot says what is missing. A person who may not see IDs is shown counts only and told that someone who may see IDs has to choose.
+- A name keeps letters and digits only, and the form says so with an example (`AB_01` is written `sub-AB01`).
+- The releases list says what a release named its subjects by, with counts, in a row of its own under the release; the hand over, handovers and withdraw dialogs say the same line. A release whose subjects kept their subject codes reads as before.
+
+### Changed
+
+- The question of what PatientID holds is one component with one wording, used by **Add a dataset**, the pseudonymise step and **Sort the files**. For a hospital or study ID it also asks what becomes of an ID with no subject code (generate its subject code from the ID, or wait for a map), and the answer goes in the same request as the rule.
+- The rules dialog asks a dataset with originals and no rule what PatientID holds whatever was pseudonymised already; a kind once said is still changed only before the first file is pseudonymised.
+- The tag chooser, **Set the IDs**, the dataset's settings and the batch page's **Read again** say the engine's refusal for such a dataset as one short line, **Say what PatientID holds first.**, with the engine's words behind the **?**. The tag chooser withholds **Save** while the question is open.
+- The choice of what becomes of an ID with no subject code names no option as recommended.
+
+No contract floor change: an engine that does not say a dataset's rule is asked nothing, one that sends no kept count reads as before, and one without the rehearsal door (`POST /api/releases/names`) gets New release as it was, with the release body unchanged.
+
 ## [1.0.0-beta.11] - 2026-11-10
 
 The eleventh desk beta finishes the sixth UX round on the proposals grid, from the first days of accepting a model's unsure proposals in production. A scan set apart takes its right value: the axis's values stand over the Accept as numbered chips, in the rules pack's order, and a key from 1 to 9 gives its value to the scan in focus or to every scan set apart, so one Accept writes the accepted, the corrected and leaves the rest as proposals. A second, quieter button accepts the whole band of the chosen value in one move, behind one confirm; the page then follows the job that writes the decisions and the re-sort after it. Both need engine 1.0.0-beta.12; with an older engine the grid is as it was. The floor is unchanged.
