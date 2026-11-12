@@ -356,10 +356,13 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
     else setIdTypes([]);
   }, [caps, epoch, namesServed]);
 
+  // 2026-11-12: by whether the cohort is read, not by the capabilities object: the shell handed on a new one with
+  // each of its reads, and what was selected here was let go each time
+  const readsCohort = served(caps, "GET /api/cohorts/{name}");
   useEffect(() => {
     setDetail(null);
     setSelected(null);
-    if (of !== "cohort" || cohort === "" || !served(caps, "GET /api/cohorts/{name}")) return;
+    if (of !== "cohort" || cohort === "" || !readsCohort) return;
     let alive = true;
     cohorts.get(cohort).then(
       (d) => alive && setDetail(d),
@@ -368,7 +371,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
     return () => {
       alive = false;
     };
-  }, [of, cohort, caps]);
+  }, [of, cohort, readsCohort]);
 
   const card = cards?.find((c) => c.handle.id === handle) ?? null;
   const suggested = useMemo(() => suggestedName(of === "cohort" ? cohort : (card?.name ?? "card"), existing), [of, cohort, card, existing]);

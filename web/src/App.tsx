@@ -330,7 +330,7 @@ export function App() {
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && route.section === "review" && <ReviewPage caps={caps} page={route.page} arg={route.arg} sub={route.sub} query={route.query} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
-          {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
+          {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} uptime={load.uptime} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}
           {ready && active === null && !onProfile && (
             <section className="state">

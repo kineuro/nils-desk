@@ -26,6 +26,7 @@ import { PlacesPage } from "./PlacesPage";
 import { keptRunning } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
+import { uptimeOf } from "../held";
 import { checkedWords, contractWords, keptByWords, newerWords, nextLookWords, orderWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords, withEngine } from "./parts";
 import { ReleasesLook } from "./ReleasesLook";
 import { SoftwarePage } from "./SoftwarePage";
@@ -41,6 +42,8 @@ interface PageProps {
   caps: Capabilities;
   install: Install | null;
   checkedAt: number | null;
+  /** The engine's uptime in seconds as the shell read it last; the capabilities keep the one they were first read with. */
+  uptime?: number | null;
   onChanged: () => void;
 }
 
@@ -142,7 +145,7 @@ function UpdateOne({ part, install, working, onUpdate }: { part: string; install
   );
 }
 
-function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & { built: string[] }) {
+function PartsPage({ caps, install, checkedAt, uptime: running, onChanged, built }: PageProps & { built: string[] }) {
   const supervised = may(caps, "install:work") && install !== null;
   const [admissions, setAdmissions] = useState<AdmissionRecord[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -174,7 +177,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
     return () => clearInterval(t);
   }, []);
 
-  const rows = partRows(caps, install, admissions, built);
+  const rows = partRows(caps, install, admissions, built, running ?? uptimeOf(caps));
   const out = install ? newerWords(install) : null;
   const order = install ? orderWords(install) : null;
   // the desk that drew this page may be replaced, so the page is drawn again by the one that runs now
@@ -440,7 +443,7 @@ const AUTH: Record<string, string> = {
   oidc: "tokens from a trusted identity provider",
 };
 
-function EnginePage({ caps, install, onChanged }: PageProps) {
+function EnginePage({ caps, install, uptime: running, onChanged }: PageProps) {
   const engine = caps.engine;
   const works = may(caps, "install:work");
   const reapply = useRun();
@@ -453,7 +456,8 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
       </div>
     );
   }
-  const uptime = typeof engine["uptime_seconds"] === "number" ? uptimeWords(engine["uptime_seconds"] as number) : null;
+  const seconds = running ?? uptimeOf(caps);
+  const uptime = seconds !== null ? uptimeWords(seconds) : null;
   const roots = engine.ingest_roots ?? [];
   return (
     <div className="settings">

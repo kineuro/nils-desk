@@ -209,11 +209,15 @@ export function DataPage({
     },
   );
 
+  // 2026-11-12: the lists are read on arrival, and again only when what this person may read changed. This depended
+  // on the capabilities object, which the shell made anew with each of its reads, every 15 s: an open page asked for
+  // both lists that often for as long as it stood (313 and 315 requests in 100 minutes).
+  const readsPlaces = served(caps, "GET /api/places");
   useEffect(() => {
     sourceReads.read(LIST);
     if (readsCohorts) cohortReads.read(LIST);
-    if (served(caps, "GET /api/places")) void placesKept.ensure();
-  }, [sourceReads, cohortReads, readsCohorts, caps]);
+    if (readsPlaces) void placesKept.ensure();
+  }, [sourceReads, cohortReads, readsCohorts, readsPlaces]);
 
   // a root is where folders live, never a dataset
   const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];

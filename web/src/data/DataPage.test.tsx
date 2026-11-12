@@ -14,7 +14,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
+import type { Capabilities } from "../capabilities";
 import { GRANTS, type Grant } from "../grants";
+import { next } from "../held";
 import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
 import type { Dataset } from "./datasets";
@@ -997,6 +999,44 @@ describe("datasets and cohorts on one page", () => {
     const words = text();
     expect(words).not.toMatch(/\bpeople\b|\bperson\b/i);
     expect(words).not.toMatch(/digest|\bbatch|\bstacks?\b|\bplace\b|arriv|dcm-anon|pyramid|classif/i);
+  });
+});
+
+describe("the shell's reads of the capabilities (2026-11-12)", () => {
+  const lists = (e: { calls: Call[] }) => e.calls.map((c) => new URL(c.url, "http://x").pathname).filter((p) => p === "/api/sources" || p === "/api/cohorts");
+  const again = (caps: Capabilities) => {
+    act(() => root.render(<DataPage caps={caps} install={null} onChanged={() => undefined} />));
+    return settle(10);
+  };
+
+  it("reads neither list again when the capabilities are read again and say the same", async () => {
+    const e = await page();
+    expect(lists(e).sort()).toEqual(["/api/cohorts", "/api/sources"]);
+    const asked = e.calls.length;
+    // the shell's next reads: a new object each time that says the same, and one whose engine counted its uptime on
+    await again(caps7a(DOORS, GRANTS));
+    const counted = caps7a(DOORS, GRANTS);
+    await again({ ...counted, engine: { ...counted.engine!, uptime_seconds: 4_000 } });
+    // and the registry written to by anyone at all, which is no change in what this person may read
+    await again({ ...counted, engine: { ...counted.engine!, registry: { ...counted.engine!.registry, epoch: 2 } } });
+    expect(lists(e)).toHaveLength(2);
+    // nor anything else: no summary, no job, no pick
+    expect(e.calls.slice(asked).map((c) => c.url)).toEqual([]);
+  });
+
+  it("hands the page one object across the shell's reads that say the same", async () => {
+    const first = next({ kind: "loading" }, { caps: caps7a(DOORS, GRANTS) }, 0);
+    const second = next(first, { caps: caps7a(DOORS, GRANTS) }, 15_000);
+    expect(first.kind === "ready" && second.kind === "ready" && first.caps === second.caps).toBe(true);
+  });
+
+  it("reads them again when what the person may read changed", async () => {
+    const e = await page({ doors: DOORS.filter((d) => d !== "GET /api/cohorts") });
+    expect(lists(e)).toEqual(["/api/sources"]);
+    // the engine now serves the cohorts
+    await again(caps7a(DOORS, GRANTS));
+    expect(lists(e).sort()).toEqual(["/api/cohorts", "/api/sources", "/api/sources"]);
+    expect(host.querySelector(".dp-grid.cohorts")).not.toBeNull();
   });
 });
 

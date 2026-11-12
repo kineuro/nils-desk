@@ -130,8 +130,13 @@ const stackLines = new Map<number, Promise<Reading | null>>();
  * otherwise, or where the door refuses. A stack of a sample sealed now comes
  * back blind, with no lines.
  */
+/** Whether a stack's reading is read at all: the engine serves it and the person may read the queue. */
+export function readsStackWhy(caps: Capabilities): boolean {
+  return served(caps, STACK_WHY) && may(caps, "review:see");
+}
+
 export function stackReadingFor(caps: Capabilities, stack: number): Promise<Reading | null> {
-  if (!served(caps, STACK_WHY) || !may(caps, "review:see")) return Promise.resolve(null);
+  if (!readsStackWhy(caps)) return Promise.resolve(null);
   const have = stackLines.get(stack);
   if (have) return have;
   const p = door<Json>("GET", `/api/stacks/${stack}/why`).then(readingOf, () => null);
