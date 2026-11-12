@@ -4,6 +4,16 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.13] - 2026-11-12
+
+The thirteenth desk beta is one rule of **New release**: a released folder is never named by an ID that leads to a person.
+
+### Changed
+
+- **Name subjects by** offers no ID type whose IDs lead to a person, whatever it keeps. Engine 1.0.0-beta.14 refuses such a type for every account; the form leaves it out of the choices.
+
+No contract floor change: the form reads the flag the types door already carries, so this desk works with the engines the one before worked with.
+
 ## [1.0.0-beta.12] - 2026-11-12
 
 The twelfth desk beta is the desk's half of one fix, met in production: a dataset of identified files that was declared with no identity rule had its PatientID read under a default type, which kept identifying IDs as values. Engine 1.0.0-beta.13 refuses such a dataset until a rule says what PatientID holds; the desk asks for it wherever a person meets that, in the words a dataset is asked when it is added. And **New release** gains **name subjects by**: the ID types tried in order to name a release's subjects, with the subject code always last, for an engine that names releases (1.0.0-beta.13).
