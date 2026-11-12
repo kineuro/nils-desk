@@ -37,6 +37,7 @@ import { compareScans, FAMILY_SLOT, FAMILY_WORD, sessionLabel } from "./tree";
 import {
   colourOf,
   COLOUR_BY,
+  COUNTING_AGAIN_MS,
   daysAreNumbers,
   fillPictures,
   filterPhrase,
@@ -300,6 +301,42 @@ function useSubjects(scope: Scope, ask: SubjectsAsk, onRefused: () => void) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is the ask
   }, [key]);
+  // the engine answered the facts it kept while it reads them again (2026-11-12): the first page is asked again until it has read, and the
+  // person's place in a list they scrolled on stays as it is
+  const tries = useRef({ key, n: 0 });
+  if (tries.current.key !== key) tries.current = { key, n: 0 };
+  const counting = state.key === key && state.page?.counting === true;
+  const shown = state.page;
+  useEffect(() => {
+    if (!counting) {
+      tries.current.n = 0;
+      return;
+    }
+    const wait = COUNTING_AGAIN_MS[Math.min(tries.current.n, COUNTING_AGAIN_MS.length - 1)];
+    let live = true;
+    const timer = setTimeout(() => {
+      tries.current.n += 1;
+      viewerDoors.subjects(scope, ask).then(
+        (fresh) => {
+          if (!live) return;
+          setState((t) => {
+            if (t.key !== key || !t.page) return t;
+            const further = t.page.subjects.length > fresh.subjects.length;
+            const page = further ? { ...fresh, subjects: t.page.subjects, next: t.page.next } : fresh;
+            hold(key, page);
+            return { ...t, page };
+          });
+        },
+        // the page shown stays; the next visit asks again
+        () => undefined,
+      );
+    }, wait);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is the ask; each answer is a new page
+  }, [key, counting, shown]);
   const more = useCallback(() => {
     const s = latest.current;
     if (busy.current || s.key !== key || !s.page || s.page.next === null) return;

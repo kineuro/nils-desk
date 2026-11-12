@@ -193,7 +193,12 @@ export interface SubjectsPage {
   subjects: Subject[];
   next: number | null;
   facets: { makers: Facet[]; regions: Facet[]; roles: Facet[]; idTypes: Facet[] };
+  /** The engine answered the facts it kept and reads them again (2026-11-12); false from an engine that reads on every request. */
+  counting: boolean;
 }
+
+/** How long after a `counting` answer the subjects are asked again: sooner at first, then every half minute while the engine goes on reading. */
+export const COUNTING_AGAIN_MS = [3_000, 6_000, 12_000, 30_000];
 
 /** One visit as its card draws it. */
 export interface Visit {
@@ -254,6 +259,7 @@ export function subjectsOf(a: Json): SubjectsPage {
     })),
     next: nul(a.next),
     facets: { makers: facets(f.makers), regions: facets(f.regions), roles: facets(f.roles), idTypes: facets(f.id_types) },
+    counting: a.counting === true,
   };
 }
 
