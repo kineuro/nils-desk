@@ -347,8 +347,15 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
     treeBox.current?.querySelector<HTMLElement>(`[data-key="x${chosen}"]`)?.scrollIntoView?.({ block: "nearest" });
   }, [chosen, rows]);
 
-  /** The grid at the place of the scan shown: its visit, the cursor on it. */
-  const gridHere = () => viewHref(scope, { ...view, mode: "grid", subject: scan?.subjectId ?? view.subject, visit: scan ? visitOf(scan) : view.visit, scan: scan?.id ?? null });
+  /**
+   * The grid at the place of the scan shown: its visit's cards, the cursor on it. The scan is kept for the cursor
+   * and left out of the address, where the grid would open it in its own viewer (2026-11-12).
+   */
+  const gridHere = () => {
+    const visit = scan ? visitOf(scan) : view.visit;
+    if (scan && visit !== null) setLastAt(lastScanKey(scope, visit), String(scan.id));
+    return viewHref(scope, { ...view, mode: "grid", subject: scan?.subjectId ?? view.subject, visit, scan: null });
+  };
   const toGrid = () => {
     if (grid) location.hash = gridHere();
   };

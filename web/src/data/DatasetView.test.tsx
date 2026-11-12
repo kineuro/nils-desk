@@ -216,11 +216,16 @@ describe("the dataset viewer's browser", () => {
 
   it("turns to the grid at the scan's visit, the cursor on it, by g and by Esc; the side's button opens the sections", async () => {
     await draw("#data/datasets/ms-a/view?mode=browser");
+    const { lastAt, lastScanKey } = await import("./viewer");
+    const seen = () => lastAt(lastScanKey({ kind: "dataset", name: "ms-a" }, "s7"));
     key(window, "g");
-    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7&scan=11");
+    // the visit's cards: the scan is kept for the cursor and left out of the address, where the grid would open it in its own viewer
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7");
+    expect(seen()).toBe("11");
     await draw("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=12");
     act(() => el.querySelector<HTMLButtonElement>("[aria-label='Close the scan']")!.click());
-    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7&scan=12");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7");
+    expect(seen()).toBe("12");
     act(() => el.querySelector<HTMLButtonElement>(".dview-sections")!.click());
     expect(sections).toBe(1);
     // with the side open over the page, its Esc closes it and the browser stays
