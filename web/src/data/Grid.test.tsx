@@ -6,7 +6,8 @@
 // one visit's scans in folders by datatype that fold, each family outlined in
 // its colour, coloured by contrast on a choice; the keyboard (arrows, Enter,
 // Esc up a level, / and g); a cohort over its members; and the browser alone
-// where the engine has no subjects door.
+// where the engine has no subjects door. A scan opened in the grid's own
+// viewer is GridViewer.test.tsx's.
 
 import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -399,8 +400,8 @@ describe("the dataset viewer's grid", () => {
     expect(first.querySelector(".vw-slices")?.textContent).toBe("176");
     expect(first.querySelector(".vw-scan-params")?.textContent).toBe("TE 2.3 TR 2300 TI 900 FA 8");
     expect(text(".vw-scan .vw-tag.look")).toEqual(["look"]);
-    // a card opens the browser at that scan
-    expect(first.getAttribute("href")).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s34&scan=11");
+    // a card opens that scan in the grid's own viewer
+    expect(first.getAttribute("href")).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34&scan=11");
     // the scouts unfold
     act(() => [...el.querySelectorAll<HTMLButtonElement>(".vw-folder-head")][2].click());
     expect(text(".vw-scan .vw-scan-name")).toContain("Localizer");
@@ -460,7 +461,7 @@ describe("the dataset viewer's grid", () => {
     expect(el.textContent).not.toContain("The first");
   });
 
-  it("opens the scan at the cursor in the browser on Enter, and moves between visits with Alt and the arrows", async () => {
+  it("opens the scan at the cursor in its own viewer on Enter, and moves between visits with Alt and the arrows", async () => {
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
     key("ArrowRight");
     act(() => {
@@ -468,8 +469,9 @@ describe("the dataset viewer's grid", () => {
     });
     key("Enter");
     await settle();
-    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s34&scan=12");
-    expect(el.querySelector(".dview")).not.toBeNull();
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34&scan=12");
+    expect(el.querySelector(".dview")).toBeNull();
+    expect(el.querySelector("[data-testid=viewer]")?.getAttribute("data-stack")).toBe("12");
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
     key("ArrowRight", { altKey: true });
     await settle();

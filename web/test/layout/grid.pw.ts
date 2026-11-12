@@ -2,7 +2,8 @@
 // The dataset viewer's grid in a real browser: on a laptop the subjects fill
 // rows of folders, a subject's visits sit side by side, and a visit's scans
 // fill rows of pictures in their folders and families; on a phone every level
-// is one column with nothing sideways. Screenshots go to test-results.
+// is one column with nothing sideways; and a scan opens in the grid's own
+// viewer on one screen. Screenshots go to test-results.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -181,5 +182,39 @@ for (const [device, width, height] of [
     await choices.nth(1).getByRole("button", { name: "Run on the 4 without a body part" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.locator(".vw-said")).toHaveText(/body part queued on 4 scans\. Jobs$/);
+  });
+}
+
+// 2026-11-12: a scan opens in the grid's own viewer, over its visit
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a scan opens in the grid's own viewer: its bar and its picture in view, nothing sideways, and Esc brings the cards back`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/grid.html#data/datasets/ms-a/view?mode=grid&subject=1&visit=s30");
+    await page.locator(".vw-scan", { hasText: "Ax_T2w_2D_TSE_ND" }).click();
+    expect(new URL(page.url()).hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s30&scan=103");
+    const view = page.locator(".scan-view");
+    await expect(view).toBeVisible();
+    await expect(page.locator(".vw-scan")).toHaveCount(0);
+    await expect(view.locator(".scan-view-name")).toContainText("Ax_T2w_2D_TSE_ND");
+    for (const name of ["Previous scan", "Next scan", "Close the scan"]) await expect(view.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    const box = (await view.locator(".scan-canvas").boundingBox())!;
+    const foot = (await page.locator(".vw-foot").boundingBox())!;
+    // one screen: the picture and the keys' line beneath it, with no scroll down
+    expect(foot.y + foot.height).toBeLessThanOrEqual(height);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(height);
+    expect(box.x).toBeGreaterThanOrEqual(width < 500 ? 15 : 216);
+    expect(box.x + box.width).toBeLessThanOrEqual(width - (width < 500 ? 15 : 31) + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/grid-viewer-${device}.png` });
+    // the next scan in the grid's order, then back to the cards with the cursor on it
+    await page.keyboard.press("ArrowRight");
+    await expect(view.locator(".scan-view-name")).toContainText("Ax_T2starw_3D_FLASH_Magnitude_ND");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".vw-scan.at .vw-scan-name")).toHaveText("Ax_T2starw_3D_FLASH_Magnitude_ND");
+    await expect(page.locator(".vw-scan.at")).toBeInViewport();
+    expect(new URL(page.url()).hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s30");
   });
 }

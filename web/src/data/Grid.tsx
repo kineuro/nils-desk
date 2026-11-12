@@ -6,8 +6,14 @@
 // of them in time; one visit's scans, the only level with pictures, in
 // folders by datatype that fold, each family together and outlined in its
 // colour. Keyboard first: the arrows move a cursor, Enter opens, Esc goes up
-// a level, / searches, g turns to the browser at the same place. Every
-// level's place is in the address, so back and forward work. Each level's
+// a level, / searches, g turns to the browser at the same place. A scan
+// opens in the grid's own light viewer, over its visit (2026-11-12: a click
+// used to leave the grid for the browser): the address stays the grid's and
+// gains the scan, next and previous walk the visit in the grid's order, and
+// Esc or its close comes back to the cards with the cursor on the scan
+// shown last. The browser stays one explicit turn away, by g or
+// Grid | Browser. Every level's place is in the address, so back and
+// forward work. Each level's
 // bar ends in Save as a selection and Make a cohort, over what it shows
 // (Keep.tsx). UX round 2: a visit's scans say where their labels came from
 // on a card's hover, read once for the visit; a card whose label a decision
@@ -23,7 +29,7 @@ import { Wait } from "../ui/Wait";
 import { KeepActions } from "./Keep";
 import { scansKept, subjectsKept, visitsKept } from "./keep";
 import { pictures as sharedPictures } from "./pictures";
-import { markOpen } from "./ScanViewer";
+import { markOpen, ScanViewer } from "./ScanViewer";
 import { useOrigins } from "./OriginFact";
 import { byStack, forgetOrigins, mayReadOrigins, mayResort, originDoors, originsFor, originTitle, sortedOf, staleAxes, staleTail, targetOfVisit } from "./origins";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
@@ -849,7 +855,7 @@ function Timeline({ visits, numbers, at, onPick }: { visits: Visit[]; numbers: b
 
 // ------------------------------------------------------------ one visit's scans
 
-/** A scan's middle frames read ahead, so it opens sharp in the browser. */
+/** A scan's middle frames read ahead, so it opens sharp. */
 function readAhead(s: Scan): void {
   const pics = sharedPictures();
   pics.preview(s.id).then(
@@ -976,13 +982,35 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
   const folders = useMemo(() => foldersOf(scans, compareScans), [scans]);
   const shownScans = folders.filter((f) => !folded.has(f.key)).flatMap((f) => f.groups.flatMap((g) => g.scans));
   const indexOf = new Map(shownScans.map((s, i) => [s.id, i]));
+  // the scan the address names, open in the grid's own viewer: next and previous walk every scan of the visit in the
+  // grid's order, folder after folder and family after family, a folded folder's too since they belong to the visit
+  const walk = useMemo(() => folders.flatMap((f) => f.groups.flatMap((g) => g.scans)), [folders]);
+  const openAt = view.scan === null ? -1 : walk.findIndex((s) => s.id === view.scan);
+  const opened = openAt >= 0 ? walk[openAt] : null;
+  const viewing = opened !== null;
+  const named = useMemo(() => walk.map((s) => (names === "bids" && s.bids ? { ...s, name: s.bids } : s)), [walk, names]);
+  // a scan the visit read does not hold (an address passed on, the scan gone since): the visit's cards, the address put right
+  const missing = view.scan !== null && !!page && !load.failed && openAt < 0;
+  useEffect(() => {
+    if (missing) go({ scan: null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the scan missing is what puts it right
+  }, [missing]);
 
   const box = useRef<HTMLDivElement | null>(null);
   const [cursor, setCursor] = useState(0);
   const placed = useRef(false);
-  // the scan last seen here, whose folder opens if it was folded
-  const wasSeen = view.scan ?? Number(lastAt(lastScanKey(scope, visit)) ?? NaN);
+  // the scan the viewer shows is the one the cursor comes back to: kept as the scans turn, placed anew once it closes
+  const openId = opened?.id ?? null;
   useLayoutEffect(() => {
+    if (openId === null) return;
+    setLastAt(lastScanKey(scope, visit), String(openId));
+    placed.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the scan shown is what is kept
+  }, [openId]);
+  // the scan last seen here, whose folder opens if it was folded
+  const wasSeen = openId ?? Number(lastAt(lastScanKey(scope, visit)) ?? NaN);
+  useLayoutEffect(() => {
+    if (viewing) return;
     const hidden = folders.find((f) => folded.has(f.key) && f.groups.some((g) => g.scans.some((s) => s.id === wasSeen)));
     if (!placed.current && hidden)
       setFolded((was) => {
@@ -991,9 +1019,9 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
         return s;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the folders read are what open it
-  }, [folders]);
+  }, [folders, viewing]);
   useLayoutEffect(() => {
-    if (placed.current || shownScans.length === 0) return;
+    if (viewing || placed.current || shownScans.length === 0) return;
     if (folders.some((f) => folded.has(f.key) && f.groups.some((g) => g.scans.some((s) => s.id === wasSeen)))) return;
     placed.current = true;
     const i = shownScans.findIndex((s) => s.id === wasSeen);
@@ -1002,7 +1030,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
     if (i >= 0) focusCard(box.current, i);
     readAhead(shownScans[to]);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the first scans read place the cursor
-  }, [shownScans.length, folded]);
+  }, [shownScans.length, folded, viewing]);
   const atScan = shownScans[Math.min(cursor, shownScans.length - 1)] ?? null;
   const moveTo = (i: number) => {
     setCursor(i);
@@ -1012,16 +1040,32 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
   };
 
   const up = viewHref(scope, { ...view, visit: null, scan: null });
+  /** The visit's cards, where the viewer closes to. */
+  const cards = viewHref(scope, { ...view, scan: null });
+  /** A scan opened in the grid's own viewer: a step of history, so back closes it. */
+  const openScan = (s: Scan) => {
+    markOpen(s.id);
+    const to = viewHref(scope, { ...view, mode: "grid", scan: s.id });
+    steppingDown(to);
+    location.hash = to;
+  };
+  // the viewer's next and previous turn the scan in place, the address following without a step of history
+  const onAt = useCallback((i: number) => walk[i] && go({ scan: walk[i].id }, true), [walk, go]);
+  const close = () => goUp(cards);
+  /** The browser at the same place: the scan the viewer shows, else the cursor's. */
   const browse = (s: Scan | null) => {
     if (s) markOpen(s.id);
     const to = viewHref(scope, { ...view, mode: "browser", scan: s?.id ?? null });
-    steppingDown(to);
+    // from the open viewer the browser is a turn beside it, not a step down: its Esc comes back to the cards
+    if (!viewing) steppingDown(to);
     location.hash = to;
   };
 
   useEffect(() => {
     const keyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || typing(e.target) || inDialog(e.target)) return;
+      // the open viewer takes the keys: the arrows, Esc and the rest are its own
+      if (viewing) return;
       if (e.altKey) {
         if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && visits && at >= 0) {
           e.preventDefault();
@@ -1046,7 +1090,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
         if ((e.target as HTMLElement | null)?.closest?.("a, button")) return;
         if (atScan) {
           e.preventDefault();
-          browse(atScan);
+          openScan(atScan);
         }
       } else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
         if (shownScans.length === 0) return;
@@ -1063,18 +1107,31 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
   const look = scans.filter(needsLook).length;
   const legend = colour === "contrast" || colour === "plane" ? legendOf(scans, colour) : [];
   const list0 = scopeList(scope);
+  // where it is, and the turn to the browser: at the scan the viewer shows, else the cursor's
+  const head = (
+    <ViewHead
+      crumbs={[
+        { label: list0.label, href: list0.href },
+        { label: scope.name, href: viewHref(scope, { ...view, subject: null, visit: null, scan: null, vfilter: [] }) },
+        { label: name, href: up, mono: true },
+        { label: title, href: viewing ? cards : undefined, mono: true },
+      ]}
+      mode="grid"
+      onMode={(m) => m === "browser" && browse(opened ?? atScan)}
+    />
+  );
+  // a scan open in the grid's own viewer stands in place of the visit's cards, the visit in the crumbs leading back to them
+  if (viewing)
+    return (
+      <section className="vw" aria-label={`a scan of ${title}`}>
+        {head}
+        <ScanViewer scans={named} at={openAt} onAt={onAt} onClose={close} />
+        <div className="vw-foot">↑ ↓ images · ← → scans · 3 three planes · Esc back to the scans</div>
+      </section>
+    );
   return (
     <section className="vw" aria-label={`the scans of ${title}`}>
-      <ViewHead
-        crumbs={[
-          { label: list0.label, href: list0.href },
-          { label: scope.name, href: viewHref(scope, { ...view, subject: null, visit: null, scan: null, vfilter: [] }) },
-          { label: name, href: up, mono: true },
-          { label: title, mono: true },
-        ]}
-        mode="grid"
-        onMode={(m) => m === "browser" && browse(atScan)}
-      />
+      {head}
       <div className="vw-title center">
         <h1 className="mono">{title}</h1>
         <span className="vw-sum">
@@ -1191,7 +1248,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                               data-stack={s.id}
                               data-slot={value?.slot}
                               className={i === cursor ? "vw-card vw-scan at" : "vw-card vw-scan"}
-                              href={viewHref(scope, { ...view, mode: "browser", scan: s.id })}
+                              href={viewHref(scope, { ...view, mode: "grid", scan: s.id })}
                               tabIndex={i === cursor ? 0 : -1}
                               title={[[s.description, value?.word, looks ? `needs a look: ${questionWords(s)}` : ""].filter(Boolean).join(" · "), where].filter(Boolean).join("\n") || undefined}
                               onFocus={() => setCursor(i)}
@@ -1199,7 +1256,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                               onClick={(e) => {
                                 if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
                                 e.preventDefault();
-                                browse(s);
+                                openScan(s);
                               }}
                             >
                               <div className="vw-pic">
@@ -1237,7 +1294,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
           );
         })}
       </div>
-      {page && scans.length > 0 && <div className="vw-foot">Arrows move · Enter opens in Browser · Alt ← → visits · Esc back to the visits</div>}
+      {page && scans.length > 0 && <div className="vw-foot">Arrows move · Enter opens · g Browser · Alt ← → visits · Esc back to the visits</div>}
     </section>
   );
 }

@@ -35,7 +35,7 @@ export interface ViewState {
   subject: number | null;
   /** The visit open: `s<session>` for a session the engine keeps, `t<study>.<study>` for one it does not. */
   visit: string | null;
-  /** The scan the browser shows. */
+  /** The scan shown: the browser's, or the one open in the grid's own viewer over its visit. */
   scan: number | null;
   /** The subjects' search, held in memory for the page (searchOf), never in the address. */
   q: string;
@@ -833,7 +833,7 @@ export const lastSubjectKey = (s: Scope) => `subject|${scopeKey(s)}`;
 export const lastVisitKey = (s: Scope, subject: number) => `visit|${scopeKey(s)}|${subject}`;
 export const lastScanKey = (s: Scope, visit: string) => `scan|${scopeKey(s)}|${visit}`;
 
-/** An address without the scan it names: the grid's level is the same whichever scan its cursor is on. */
+/** An address without the scan it names: a level is the same whichever scan is open on it. */
 export const levelOfForTest = (hash: string) => levelOf(hash);
 function levelOf(hash: string): string {
   const r = parse(hash);
