@@ -1188,6 +1188,20 @@ describe("what the page read last, kept between visits (2026-11-12)", () => {
     }
   });
 
+  it("sends no second read for an epoch that moves while the arrival's reads are out", async () => {
+    const e = slow([done]);
+    draw();
+    await settle();
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts")]).toEqual([1, 1]);
+    const moved = caps7a(DOORS, GRANTS);
+    draw({ ...moved, engine: { ...moved.engine!, registry: { ...moved.engine!.registry, epoch: 2 } } });
+    await settle();
+    // the reads that are out answer for the move
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts")]).toEqual([1, 1]);
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-f"]);
+  });
+
   it("takes up the other account in a page that stays open, and reads for it", async () => {
     await page();
     const other = caps7a(DOORS, GRANTS);
@@ -1219,11 +1233,31 @@ describe("the shell's reads of the capabilities (2026-11-12)", () => {
     await again(caps7a(DOORS, GRANTS));
     const counted = caps7a(DOORS, GRANTS);
     await again({ ...counted, engine: { ...counted.engine!, uptime_seconds: 4_000 } });
-    // and the registry written to by anyone at all, which is no change in what this person may read
-    await again({ ...counted, engine: { ...counted.engine!, registry: { ...counted.engine!.registry, epoch: 2 } } });
     expect(lists(e)).toHaveLength(2);
     // nor anything else: no summary, no job, no pick
     expect(e.calls.slice(asked).map((c) => c.url)).toEqual([]);
+  });
+
+  it("reads both lists and each dataset's summary once when the registry's epoch moves, and nothing while it stands", async () => {
+    const e = await page();
+    const sums = () => e.calls.filter((c) => /^\/api\/datasets\/[^/]+\/summary$/.test(new URL(c.url, "http://x").pathname)).length;
+    // the arrival: each list and each summary once, the epoch it arrived with no second reason
+    expect([lists(e).sort(), sums()]).toEqual([["/api/cohorts", "/api/sources"], 3]);
+    const at = (epoch: number, uptime: number): Capabilities => {
+      const c = caps7a(DOORS, GRANTS);
+      return { ...c, engine: { ...c.engine!, uptime_seconds: uptime, registry: { ...c.engine!.registry, epoch } } };
+    };
+    // somebody else, or a command line, wrote the registry
+    await again(at(2, 15));
+    expect([lists(e).sort(), sums()]).toEqual([["/api/cohorts", "/api/cohorts", "/api/sources", "/api/sources"], 6]);
+    // the shell's next reads say the same epoch: nothing at all is read
+    const asked = e.calls.length;
+    await again(at(2, 30));
+    await again(at(2, 45));
+    expect(e.calls.slice(asked).map((c) => c.url)).toEqual([]);
+    // and the next move reads once more
+    await again(at(3, 60));
+    expect([lists(e).length, sums()]).toEqual([6, 9]);
   });
 
   it("hands the page one object across the shell's reads that say the same", async () => {

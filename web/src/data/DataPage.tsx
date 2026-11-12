@@ -311,6 +311,25 @@ export function DataPage({
     summaryReads.follow(followKey === "" ? [] : followKey.split("\n"));
   }, [runningKey, listCounting, cohortsCounting, followKey, sourceReads, cohortReads, summaryReads]);
 
+  // 2026-11-12: and both lists are read again when the registry's epoch moves while the page stands: somebody else,
+  // or a command line, wrote the registry, and no job or act of this page said so. This is the one reason the page
+  // looks at what the shell reads of the capabilities at all, and only a change of the number reads: a read of them
+  // that says the same reads nothing (the fault of every 15 s, above). The epoch the page arrived with is the one
+  // remembered, so the arrival's own read is not doubled; a read that is out answers for the move, and each
+  // dataset's summary is read once for it.
+  const epoch = caps.engine?.registry.epoch ?? null;
+  const epochSeen = useRef(epoch);
+  useEffect(() => {
+    const was = epochSeen.current;
+    epochSeen.current = epoch;
+    // an engine that went or came back is another arrival, which reads by itself
+    if (was === null || epoch === null || was === epoch) return;
+    sourceReads.read(LIST);
+    if (readsCohorts) cohortReads.read(LIST);
+    if (summarises) for (const name of listed.current) summaryReads.read(name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a move of the epoch is what reads again
+  }, [epoch]);
+
   // words about a dataset's run go once it is over: seen running and now not, or a step of it finished since the words were said
   useEffect(() => {
     const until = said?.until;
