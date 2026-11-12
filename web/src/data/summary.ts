@@ -15,6 +15,7 @@ import type { Dataset } from "./datasets";
 import { liveOf, liveWords, whatWords } from "../ops/progress";
 import { declared } from "./layout";
 import { ASKS_WORDS, asksHolds, ranOf } from "./pseudoStep";
+import { COUNTING_WORDS, isCounted } from "./sources";
 import { outsideWords, readStopped, type NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
@@ -234,10 +235,12 @@ function segmentOf(state: StepState | undefined): Segment {
  * counts it among the reads (2026-10-17). While the summary is on its way
  * (`pending`), a segment the sources door does not show done or running is
  * not known yet, never "not yet"; a dataset never read has read nothing to
- * sort, pick or picture.
+ * sort, pick or picture. Of a dataset listed before its first count
+ * (2026-11-12) the sources door says nothing: every segment is not known yet.
  */
 export function railOf(d: Dataset, s: DatasetSummary | null, pending = false): Segment[] {
   if (s) return CARD_STEPS.map((name) => (name === "read" && readStopped(d, s) ? "wait" : segmentOf(s.steps.find((x) => x.step === name)?.state)));
+  if (!isCounted(d)) return CARD_STEPS.map(() => "unknown");
   const unknown = stateOf(d) === "unknown" || d.arrives === "undeclared";
   // a tree's count that stopped short before it reached a file counted nothing, and says nothing of the tree (2026-10-17)
   const counted = (t: { files: number | null; partial?: boolean } | null | undefined) => (typeof t?.files === "number" && !(t.partial === true && t.files === 0) ? t.files : null);
@@ -255,9 +258,11 @@ export function railOf(d: Dataset, s: DatasetSummary | null, pending = false): S
 
 /**
  * The steps of an engine that has no summary door, from what the sources door
- * says: found, read and sorted with their counts, the rest waiting.
+ * says: found, read and sorted with their counts, the rest waiting. None for
+ * a dataset listed before its first count: the door says nothing of them yet.
  */
 export function stepsOfSources(d: Dataset): SummaryStep[] {
+  if (!isCounted(d)) return [];
   const rail = railOf(d, null);
   const state = (seg: Segment): StepState => (seg === "done" ? "done" : seg === "run" ? "running" : "waiting");
   const last = d.digests.recent[0] ?? null;
@@ -357,7 +362,7 @@ export function countWords(c: CountProgress | null | undefined): string {
     const where = c.place ? `Counting files in ${c.place}` : "Counting files";
     return typeof c.done === "number" && c.done > 0 ? `${where}: ${n(c.done)} so far` : where;
   }
-  return "Counting scans and files";
+  return COUNTING_WORDS;
 }
 
 /** How old a count is, briefly: "2 min ago", "3 h ago", or the day where it is older than a day. */
@@ -613,6 +618,8 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
     // a run of it ran, by the summary or, before it is read, the sources door's batches: what it left waits, never the whole dataset as if nothing had run (2026-10-17)
     return ranOf(d, stepOf(s, "pseudonymised")) ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
   }
+  // listed before its first count (2026-11-12): one phrase, and no number of what nobody counted
+  if (!isCounted(d)) return COUNTING_WORDS;
   const running = s?.steps.find((x) => x.state === "running");
   // a model's run says how far it is in the engine's count (2026-11-05), where its run's beat says it
   const live = running && (OPERATIONS as StepName[]).includes(running.step) ? liveWords(liveOf(running.progress)) : null;

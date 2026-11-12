@@ -52,7 +52,7 @@ describe("a dataset's certainty", () => {
     expect(nextStep(ds({ stacks: 30, to_sort: 30 }, 0))).toMatchObject({ step: "sort" });
     // a read running: Running, never Review
     const running = ds({ stacks: 120, to_sort: 8 }, 10);
-    running.digests.recent[0].state = "running";
+    running.digests!.recent[0].state = "running";
     expect(nextStep(running)).toMatchObject({ label: "Running", busy: true });
   });
 });

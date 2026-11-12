@@ -28,7 +28,7 @@ import { sizeWords } from "../settings/database";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useReads } from "../ui/kept";
-import { jobs as jobsDoor, packFor, type ChainedJob, type Dataset } from "./datasets";
+import { COUNTING_WORDS, isCounted, jobs as jobsDoor, packFor, type ChainedJob, type Dataset } from "./datasets";
 import { cancelRefusal } from "./now";
 import type { LiveJobs } from "./Now";
 import { DatasetSettings } from "./DatasetSettings";
@@ -125,9 +125,10 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
     next,
     primary,
     // reading new files pseudonymises them: not offered while no rule says what PatientID holds
-    readNew: readable && next.step !== "read-new" && !again && d.digests.count > 0 && !asksHolds(d),
-    view: d.totals.stacks > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
-    readAgain: readable && !again && d.digests.count > 0,
+    // a dataset listed before its first count (2026-11-12) is offered neither read nor the viewer on a guess of what it holds
+    readNew: readable && next.step !== "read-new" && !again && (d.digests?.count ?? 0) > 0 && !asksHolds(d),
+    view: (d.totals?.stacks ?? 0) > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
+    readAgain: readable && !again && (d.digests?.count ?? 0) > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",
     /** The cohort it feeds, among its settings: Data work and Places work, through its place. */
     settings: works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}"),
@@ -160,7 +161,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const stopped = useStopped(caps, s);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it;
   // while the summary is on its way (or its read failed), what a run left is not known, and the step says so (2026-10-17)
-  const unread = s === null && maySummarise(caps) ? (props.summaryWhy ? "failed" : "reading") : undefined;
+  // and so is what a dataset listed before its first count holds (2026-11-12)
+  const unread = s === null && (maySummarise(caps) || !isCounted(d)) ? (props.summaryWhy ? "failed" : "reading") : undefined;
   const pseudo = usePseudonymise(caps, d, s, unread);
   const view = pseudo.view;
   const [stepOpen, setStepOpen] = useState<boolean | null>(props.openStep ? true : null);
@@ -248,7 +250,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
 
   const refusedBatch = s?.files.refused_batch ?? null;
   // record 56: the files set aside by policy are not scans and ask nobody anything; only the rest has a page to look at
-  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: s?.files.set_aside });
+  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals?.refused_files, set_aside: s?.files.set_aside });
   const ids = idsWords(d);
   // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds;
   // while what a run left is counted, its structure alone
@@ -397,8 +399,16 @@ export function DatasetDetail(props: DatasetDetailProps) {
         ) : maySummarise(caps) && !props.summaryWhy ? (
           // 2026-11-05: what the first count counts and how far, never a wait without words
           <p className="meta dp-first" role="status">
-            {props.first ? `${countWords(props.first)}.` : "Reading where it is."}
+            {props.first ? `${countWords(props.first)}.` : isCounted(d) ? "Reading where it is." : `${COUNTING_WORDS}.`}
           </p>
+        ) : !isCounted(d) ? (
+          // 2026-11-12: listed before its first count, the sources door says no step of it: the count is said, never steps at zero
+          <>
+            <p className="meta dp-first" role="status">
+              {COUNTING_WORDS}.
+            </p>
+            {props.summaryWhy && <p className="warn">Where it is could not be read: {props.summaryWhy}</p>}
+          </>
         ) : props.summaryWhy ? (
           <>
             <StepRail steps={stepsOfSources(d)} now={now} />
@@ -495,14 +505,16 @@ export function DatasetDetail(props: DatasetDetailProps) {
 /** What a dataset holds: the funnel, how sure the sort is, its kinds of scan and its files; while the engine counts them again, when the ones shown were read (2026-10-31). */
 function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Dataset; summary: DatasetSummary | null; reviews?: boolean; now?: number }) {
   const counting = countingWords(s, now === undefined ? undefined : new Date(now));
-  const subjects = s?.subjects ?? d.totals.subjects;
-  const visits = s ? (s.sessions ?? s.studies) : d.totals.sessions || d.totals.studies;
-  const scans = s?.scans ?? d.totals.stacks;
-  const sure = s?.sure ?? d.totals.sure ?? Math.max(0, d.totals.stacks - d.totals.to_sort);
-  const look = s?.need_a_look ?? d.totals.to_sort;
-  const unsorted = s?.unsorted ?? d.totals.unsorted ?? 0;
-  const outside = s?.outside ?? d.totals.outside ?? 0;
-  const outsideBy = s?.outside_by ?? d.totals.outside_by ?? {};
+  // the sources door's counts stand in where no summary is read; a dataset listed before its first count has neither, and is said below
+  const t = d.totals;
+  const subjects = s?.subjects ?? t?.subjects ?? 0;
+  const visits = s ? (s.sessions ?? s.studies) : (t?.sessions || t?.studies) ?? 0;
+  const scans = s?.scans ?? t?.stacks ?? 0;
+  const sure = s?.sure ?? t?.sure ?? Math.max(0, (t?.stacks ?? 0) - (t?.to_sort ?? 0));
+  const look = s?.need_a_look ?? t?.to_sort ?? 0;
+  const unsorted = s?.unsorted ?? t?.unsorted ?? 0;
+  const outside = s?.outside ?? t?.outside ?? 0;
+  const outsideBy = s?.outside_by ?? t?.outside_by ?? {};
   const kinds = (s?.kinds ?? []).slice(0, 6);
   const most = Math.max(1, ...kinds.map((k) => k.scans));
   const found = foundOf(d, s);
@@ -515,7 +527,7 @@ function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Data
   const [why, setWhy] = useState(false);
   // Nima, 2026-10-12: a dataset counts the subjects of its stacks; whose its set-aside files are, where no stack of theirs is here, is said of the files
   const asideOf = setAsideOfWords(setAside, s?.files.set_aside_no_scans);
-  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: setAside });
+  const refused = refusedOnly({ refused: s?.files.refused ?? t?.refused_files, set_aside: setAside });
   const batch = s?.files.refused_batch ?? null;
   // the duplicate policy (2026-10-10): files gone from the folder, files a
   // person let go out of the read, and the questions about scans filed
@@ -524,6 +536,8 @@ function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Data
   const leftOut = s?.files.left_out ?? 0;
   const questions = s?.identity_questions ?? 0;
   const nothing = scans === 0 && subjects === 0;
+  // 2026-11-12: no summary and no counts from the list: nothing was counted, and no zero is drawn as if it were
+  if (s === null && !isCounted(d)) return <p className="meta">Not counted yet.</p>;
   return (
     <>
       {counting && (

@@ -62,8 +62,20 @@ export interface Source {
   handling: Handling;
   handling_declared: boolean;
   roots: number;
-  digests: { count: number; first: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; last: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; recent: Digest[] };
-  totals: {
+  /**
+   * The counts (`held`, `digests`, `totals`) are kept by the engine and
+   * answered at once whatever their age (2026-11-12). `counted` is false only
+   * where the list was asked at once and the dataset has never been counted:
+   * it then comes with its place and dataset fields and without the three.
+   * `counting` says a count runs apart and the next answer may say more, and
+   * `counts_as_of` when the counts were made. An engine before this sends none
+   * of the three words and always the counts.
+   */
+  counted?: boolean;
+  counting?: boolean;
+  counts_as_of?: string | null;
+  digests?: { count: number; first: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; last: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; recent: Digest[] };
+  totals?: {
     subjects: number;
     studies: number;
     sessions: number;
@@ -85,9 +97,32 @@ export interface Source {
   picks?: "after_sort" | "off";
 }
 
-/** The one sources door: every source as a dataset at record 26, with the fields an older engine leaves out, and the rates where the engine measured them. */
+/** What a dataset says where its counts did not come with it: the words the summary's first count uses before it names a tree. */
+export const COUNTING_WORDS = "Counting scans and files";
+
+/** A listed dataset with its counts. */
+export type Counted<S extends { totals?: unknown; digests?: unknown }> = S & { totals: NonNullable<S["totals"]>; digests: NonNullable<S["digests"]> };
+
+/**
+ * Whether a listed dataset came with its counts (2026-11-12). One asked at
+ * once before its first count did not: what it holds is not known, and a page
+ * says it is being counted, never a zero. An engine before this always sends
+ * the counts and says nothing of `counted`.
+ */
+export function isCounted<S extends { counted?: boolean; totals?: unknown; digests?: unknown }>(s: S): s is Counted<S> {
+  return s.counted !== false && s.totals != null && s.digests != null;
+}
+
+/**
+ * The one sources door: every source as a dataset at record 26, with the
+ * fields an older engine leaves out, and the rates where the engine measured
+ * them. `atOnce` (2026-11-12) never waits for a dataset's first count: such a
+ * dataset comes without its counts (`isCounted`), so only a page that says so
+ * and reads again while the list says `counting` asks this way. An engine
+ * before this ignores the word and waits, as before.
+ */
 export const sources = {
-  list: (recent = 12) => door<SourcesAnswer>("GET", `/api/sources?recent=${recent}`),
+  list: (recent = 12, atOnce = false) => door<SourcesAnswer>("GET", `/api/sources?recent=${recent}${atOnce ? "&at_once=1" : ""}`),
 };
 
 export type Mark = "done" | "now" | "wait" | "failed" | "none";
@@ -117,6 +152,7 @@ export function digestMarks(d: Digest): { name: string; mark: Mark; words: strin
 
 /** What a source's card says first: reading, what waits, or that it is up to date. */
 export function sourceState(s: Source): { words: string; tone: "brand" | "caution" | "ok" | "neutral" } {
+  if (!isCounted(s)) return { words: "counting", tone: "neutral" };
   if (s.digests.recent.some((d) => d.state === "running")) return { words: "reading now", tone: "brand" };
   if (s.totals.to_sort > 0) return { words: `${s.totals.to_sort.toLocaleString("en-US")} to sort`, tone: "caution" };
   if (s.digests.count === 0) return { words: "not read yet", tone: "neutral" };

@@ -70,7 +70,7 @@ const identified = ds("ward-a", 2, {
   trees: { originals: { path: "/srv/in/ward-a/derivatives/dcm-original", files: 40, bytes: null }, anon: { path: "/srv/in/ward-a/derivatives/dcm-anon", files: 0, last_written: null } },
 });
 const toRead = ds("ward-d", 5, { state: "anonymised", arrives: "deidentified", patient_id: "subject-code", subjects: "generated", trees: { originals: null, anon: { path: "/x", files: 12, last_written: null } } });
-const readOnce = { ...base.digests.recent[0], state: "done", classified: 0, to_sort: 7 };
+const readOnce = { ...base.digests!.recent[0], state: "done", classified: 0, to_sort: 7 };
 const toSort = ds("ward-e", 6, { ...toRead, id: 6, name: "ward-e", digests: { count: 1, first: null, last: null, recent: [readOnce] }, totals: { ...toRead.totals, stacks: 30, to_sort: 7 } } as Partial<Dataset>);
 const done = ds("ward-f", 7, { ...toRead, id: 7, name: "ward-f", digests: { count: 1, first: null, last: null, recent: [{ ...readOnce, classified: 30, to_sort: 0 }] }, totals: { ...toRead.totals, stacks: 30 } } as Partial<Dataset>);
 
