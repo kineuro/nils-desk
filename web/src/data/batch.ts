@@ -57,7 +57,7 @@ export function datasetOf(batch: BatchDoc, sources: Source[]): Dataset | null {
     const s = sources.find((x) => x.name === named);
     if (s) return s;
   }
-  const listed = sources.find((s) => s.digests.recent.some((d) => d.id === batch.id));
+  const listed = sources.find((s) => s.digests?.recent.some((d) => d.id === batch.id));
   if (listed) return listed;
   const byName = sources.filter((s) => batch.name === s.name || batch.name.startsWith(`${s.name}-`)).sort((a, b) => b.name.length - a.name.length);
   return byName[0] ?? null;

@@ -2,10 +2,11 @@
 // A read kept between pages: read once, joined while under way, kept through
 // a failure, replaced by what another page read, and said in words. And a
 // page's reads of a door: one at a time per thing read, the next a while
-// after the last answer, and an answer to a read let go of let go too.
+// after the last answer, and an answer to a read let go of let go too. And
+// what a page's reads brought, kept between its visits for one person.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { agoWords, keeper, reads } from "./kept";
+import { agoWords, keeper, reads, shelf } from "./kept";
 
 function later<T>() {
   let resolve!: (v: T) => void;
@@ -173,6 +174,86 @@ describe("a page's reads of a door (2026-10-17)", () => {
     r.start();
     r.ensure("a");
     expect(asked).toHaveLength(2);
+  });
+});
+
+describe("what a page's reads brought, kept between visits (2026-11-12)", () => {
+  it("keeps an answer by its key and hands out the same object until something changes", () => {
+    const s = shelf<number>();
+    s.take("astrid");
+    expect(s.get("astrid")).toEqual({});
+    let told = 0;
+    const off = s.subscribe(() => told++);
+    expect(s.land("astrid", "a", s.sent(), 1)).toBe(true);
+    const kept = s.get("astrid");
+    expect(kept).toEqual({ a: 1 });
+    expect(s.get("astrid")).toBe(kept);
+    expect(told).toBe(1);
+    // a key let go of that was never kept changes nothing
+    s.drop("astrid", "b");
+    expect(s.get("astrid")).toBe(kept);
+    expect(told).toBe(1);
+    off();
+    s.land("astrid", "b", s.sent(), 2);
+    expect(told).toBe(1);
+    expect(s.get("astrid")).toEqual({ a: 1, b: 2 });
+  });
+
+  it("never lands a slow older answer over a newer one, whichever came first", () => {
+    const s = shelf<string>();
+    s.take("astrid");
+    const older = s.sent();
+    const newer = s.sent();
+    expect(s.land("astrid", "list", newer, "newer")).toBe(true);
+    expect(s.land("astrid", "list", older, "older")).toBe(false);
+    expect(s.get("astrid")).toEqual({ list: "newer" });
+    // in the order they were sent, each lands
+    expect(s.land("astrid", "list", s.sent(), "newest")).toBe(true);
+    expect(s.get("astrid")).toEqual({ list: "newest" });
+    // and a key is placed by its own reads alone
+    expect(s.land("astrid", "other", older, "its first")).toBe(true);
+  });
+
+  it("hands one person nothing of what was kept for another, and keeps nothing under another's name", () => {
+    const s = shelf<string>();
+    s.take("astrid");
+    const sent = s.sent();
+    s.land("astrid", "list", s.sent(), "hers");
+    expect(s.get("birgit")).toEqual({});
+    // an answer read for another than the one the shelf is taken up for is let go
+    expect(s.land("birgit", "list", s.sent(), "not kept")).toBe(false);
+    s.drop("birgit", "list");
+    s.only("birgit", new Set());
+    expect(s.get("astrid")).toEqual({ list: "hers" });
+    // taken up for another, what was kept is gone, also for the one it was kept for
+    let told = 0;
+    s.subscribe(() => told++);
+    s.take("birgit");
+    expect(told).toBe(1);
+    expect(s.get("birgit")).toEqual({});
+    expect(s.get("astrid")).toEqual({});
+    // and a read sent for the first before that answers to nobody
+    expect(s.land("astrid", "list", sent, "late")).toBe(false);
+    expect(s.land("birgit", "list", s.sent(), "hers now")).toBe(true);
+    s.take("astrid");
+    expect(s.get("astrid")).toEqual({});
+  });
+
+  it("lets go of the keys a page no longer holds, and of everything", () => {
+    const s = shelf<number>();
+    s.take("astrid");
+    for (const k of ["a", "b", "c"]) s.land("astrid", k, s.sent(), 1);
+    const all = s.get("astrid");
+    s.only("astrid", new Set(["a", "b", "c", "d"]));
+    expect(s.get("astrid")).toBe(all);
+    s.only("astrid", new Set(["a", "c"]));
+    expect(s.get("astrid")).toEqual({ a: 1, c: 1 });
+    s.drop("astrid", "a");
+    expect(s.get("astrid")).toEqual({ c: 1 });
+    s.forget();
+    expect(s.get("astrid")).toEqual({});
+    // forgotten, it is nobody's until taken up again
+    expect(s.land("astrid", "a", s.sent(), 1)).toBe(false);
   });
 });
 

@@ -7,12 +7,13 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
 import { state } from "./deployment";
 import { GRANTS } from "./grants";
-import { type Load, missed, next, OUTAGE_AFTER, outage } from "./held";
+import { type Load, missed, next, OUTAGE_AFTER, outage, same } from "./held";
 
-function caps(reachable = true): Capabilities {
+function caps(reachable = true, uptime = 60): Capabilities {
   return {
     engine: reachable
       ? {
+          uptime_seconds: uptime,
           engine: { name: "nils", version: "1.0.0" },
           contracts: { openapi: "7", suite: "3" },
           doors: ["GET /api/capabilities"],
@@ -80,5 +81,51 @@ describe("the shell's reads of the capabilities", () => {
     out.desk.signed_in = false;
     out.desk.login = { kind: "password", url: "/desk/login" };
     expect(missed({ caps: out })).toBe(false);
+  });
+
+  // 2026-11-12: every read handed the pages a new object, and a page whose
+  // arrival depended on it read its lists again with every read
+  const held = (l: Load) => (l.kind === "ready" ? l.caps : null);
+
+  it("hands the pages the object they hold while the document says the same", () => {
+    const first = next({ kind: "loading" }, { caps: caps() }, 0);
+    // the engine's uptime counts on with every read and is no change
+    const second = next(first, { caps: caps(true, 75) }, 15_000);
+    expect(held(second)).toBe(held(first));
+    expect(second).toMatchObject({ kind: "ready", missed: 0, uptime: 75 });
+    // a read that missed, and the one that answers after it, hand on the same object too
+    const back = next(next(second, { error: "Failed to fetch" }, 30_000), { caps: caps(true, 93) }, 33_000);
+    expect(held(back)).toBe(held(first));
+    expect(back).toMatchObject({ missed: 0, since: null, uptime: 93 });
+  });
+
+  it("hands on a document that says something else", () => {
+    const first = next({ kind: "loading" }, { caps: caps() }, 0);
+    const changes: ((c: Capabilities) => void)[] = [
+      (c) => void (c.engine!.registry.epoch = 6),
+      (c) => void (c.person!.grants = c.person!.grants.slice(1)),
+      (c) => void c.engine!.doors.push("GET /api/sources"),
+      (c) => void (c.person!.subject = "someone-else"),
+      (c) => void (c.desk.signed_in = false),
+      (c) => void (c.kvasir = { gateway: { name: "kvasir", version: "1" } } as unknown as Capabilities["kvasir"]),
+    ];
+    for (const change of changes) {
+      const other = caps(true, 75);
+      change(other);
+      const l = next(first, { caps: other }, 15_000);
+      expect(held(l)).toBe(other);
+      // and the one after it, saying the same again, keeps the changed one
+      const again = caps(true, 90);
+      change(again);
+      expect(held(next(l, { caps: again }, 30_000))).toBe(other);
+    }
+  });
+
+  it("compares two documents by what they say", () => {
+    expect(same({ a: [1, { b: null }], c: "x" }, { c: "x", a: [1, { b: null }] })).toBe(true);
+    expect(same({ a: [1, 2] }, { a: [2, 1] })).toBe(false);
+    expect(same({ a: 1 }, { a: 1, b: undefined })).toBe(false);
+    expect(same({ a: null }, { a: {} })).toBe(false);
+    expect(same([], {})).toBe(false);
   });
 });

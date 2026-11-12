@@ -4,6 +4,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The Data page draws at once. The lists of datasets and cohorts and each dataset's summary are kept for the life of the browser tab and drawn first, then read again behind; the datasets are asked with `at_once=1`, so a dataset never counted shows its card with "counting" in place of holding the page; a list that is being counted is followed every few seconds until its counts land, and otherwise read again when the registry's epoch moves, not every 15 seconds.
+- In the grid, a click on a scan opens it in the grid's own viewer over its visit (`mode=grid&scan=ID`, so back, forward, a reload and a copied address lead to the same place); next and previous walk the visit's scans in the grid's order, and Esc or the close comes back to the cards with the cursor on the scan shown last. Before, the click left the grid for the browser, which stays one turn away (`g`, or the Grid | Browser switch).
+- The grid lists subjects in the order of what they are shown by, and that is the default: by subject code, or by the chosen ID type's values (`S2` before `S10`, subjects without one last). The order's first choice is worded as the shown type is. The other orders stay. An engine before `order=id` is asked the code's order in its place.
+- The grid follows the engine's kept subjects: it shows what the engine answers at once and, while the engine says it reads them again, asks the first page again after 3, 6, 12 and then every 30 seconds.
+
+No contract floor change: every new field and word is additive, and an engine before them is asked as before.
+
 ## [1.0.0-beta.13] - 2026-11-12
 
 The thirteenth desk beta is one rule of **New release**: a released folder is never named by an ID that leads to a person.

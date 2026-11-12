@@ -15,12 +15,12 @@ import type { Place } from "../objects/client";
 import { ops } from "../ops/client";
 import { cohorts as cohortDoors } from "./cohorts";
 import { SAME_EVERYWHERE, type IdType, type ImportColumn, type ImportReport } from "./pseudonyms";
-import { digestMarks, fileWords, whenWords, type Digest, type Mark, type Source } from "./sources";
+import { digestMarks, fileWords, isCounted, whenWords, type Digest, type Mark, type Source } from "./sources";
 
 // The doors more than one page reads are typed once and read from here: the sources door (with `sources`), the jobs
 // doors (the operations client), the linkage types and imports (with the Pseudonymisation page), the cohorts (with
 // the Cohorts page). The shapes below are the ones the other pages import.
-export { sources } from "./sources";
+export { COUNTING_WORDS, isCounted, sources, type Counted } from "./sources";
 export { linkage } from "./pseudonyms";
 export type { ChainedJob, IdType as LinkageType, ImportReport };
 export type MapColumn = ImportColumn;
@@ -102,7 +102,7 @@ export interface Batch extends Digest {
 
 /** A source place as the sources door lists it at record 26; every new field is absent from an older engine. */
 export interface Dataset extends Omit<Source, "digests"> {
-  digests: Omit<Source["digests"], "recent"> & { recent: Batch[] };
+  digests?: Omit<NonNullable<Source["digests"]>, "recent"> & { recent: Batch[] };
   arrives?: Arrival;
   /** Wave 7a: what the place is, what its structure says, and the root it was found under. */
   kind?: SourceKind;
@@ -142,6 +142,9 @@ export interface SourcesAnswer {
   count: number;
   window_days: number;
   sources: Dataset[];
+  /** 2026-11-12: a count of some dataset runs apart, and the next answer may say more; and the oldest of the datasets' counts. An engine before this sends neither. */
+  counting?: boolean;
+  counts_as_of?: string | null;
   rates?: Rates | null;
 }
 
@@ -293,7 +296,7 @@ export function arrivesWords(arrives: Arrives): { words: string; tone: "gated" |
 
 /** A running job of a dataset: a digest reading, or a pseudonymise still writing. */
 function reading(d: Dataset): boolean {
-  return d.digests.recent.some((b) => b.state === "running");
+  return d.digests?.recent.some((b) => b.state === "running") ?? false;
 }
 
 /** What a dataset's card says first: reading, what is held, what waits, not read, not sorted, or up to date. */
@@ -301,6 +304,8 @@ export function datasetState(d: Dataset): { words: string; tone: "brand" | "caut
   // Wave 7a: a dataset whose structure says nothing is never read, whatever it held before
   if (d.arrives === "undeclared" || d.state === "unknown") return { words: "not read", tone: "caution" };
   if (reading(d)) return { words: "reading now", tone: "brand" };
+  // asked at once before its first count (2026-11-12): nothing is said of what it holds
+  if (!isCounted(d)) return { words: "counting", tone: "neutral" };
   const held = d.held?.files ?? 0;
   if (held > 0) return { words: `${n(held)} need a subject code`, tone: "caution" };
   if (d.totals.to_sort > 0) return { words: `${n(d.totals.to_sort)} to sort`, tone: "caution" };
@@ -355,6 +360,7 @@ export function batchLine(b: Batch, now = new Date()): string {
 
 /** The last line of a dataset's card: its newest batch, or that nothing has read it. */
 export function lastLine(d: Dataset, now = new Date()): string {
+  if (!d.digests) return "counting";
   const newest = d.digests.recent[0];
   if (!newest) return d.digests.count === 0 ? "not read yet" : `${d.digests.count} ${d.digests.count === 1 ? "batch" : "batches"} · last ${whenWords(d.digests.last?.started_at ?? null, now)}`;
   return batchLine(newest, now);

@@ -152,7 +152,7 @@ describe("a card's six steps", () => {
 
   it("say what the sources door already says before the summary is read", () => {
     expect(railOf(dataset(), null)).toEqual(["done", "done", "wait", "wait", "wait", "wait"]);
-    const sorted = dataset({ totals: { ...dataset().totals, unsorted: 0 } });
+    const sorted = dataset({ totals: { ...dataset().totals!, unsorted: 0 } });
     expect(railOf(sorted, null)).toEqual(["done", "done", "done", "wait", "wait", "wait"]);
     // a dataset whose structure says nothing has found nothing it reads
     const loose = dataset({ arrives: "undeclared", trees: { originals: null, anon: null }, digests: { count: 0, first: null, last: null, recent: [] }, dataset: { state: "unknown" } });
@@ -316,7 +316,7 @@ describe("body part and post-contrast, steps of their own", () => {
 
 describe("an engine without the summary door", () => {
   it("still says found, read and sorted from the sources door, and the rest waiting", () => {
-    const steps = stepsOfSources(dataset({ totals: { ...dataset().totals, unsorted: 0 } }));
+    const steps = stepsOfSources(dataset({ totals: { ...dataset().totals!, unsorted: 0 } }));
     expect(steps.map((x) => [x.step, x.state])).toEqual([
       ["found", "done"],
       ["read", "done"],
@@ -365,7 +365,7 @@ describe("a card's line", () => {
     expect(cardLine(d, nextStep(d), summary())).toBe("3D views: running now");
     const loose = dataset({ arrives: "undeclared", dataset: { state: "unknown" } });
     expect(cardLine(loose, nextStep(loose), null)).toBe("Loose files: choose where they go");
-    const fresh = dataset({ digests: { count: 0, first: null, last: null, recent: [] }, totals: { ...d.totals, stacks: 0, subjects: 0 } });
+    const fresh = dataset({ digests: { count: 0, first: null, last: null, recent: [] }, totals: { ...d.totals!, stacks: 0, subjects: 0 } });
     expect(cardLine(fresh, nextStep(fresh), null)).toBe("Not read yet");
     // an identified dataset whose IDs wait: a subject code, never a bare "code" (2026-10-10)
     const waiting = dataset({ held: { files: 516, identifiers: 4 } } as never);
@@ -416,7 +416,7 @@ describe("a card's line", () => {
 
 describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
   // read twice: the newest read cancelled part way, after one that finished; the summary counts it among the reads and calls the step done
-  const d = dataset({ digests: { ...dataset().digests, count: 2, recent: [{ ...dataset().digests.recent[0], id: 2, state: "cancelled", classified: 0 }, dataset().digests.recent[0]] } });
+  const d = dataset({ digests: { ...dataset().digests!, count: 2, recent: [{ ...dataset().digests!.recent[0], id: 2, state: "cancelled", classified: 0 }, dataset().digests!.recent[0]] } });
 
   it("says on the card that the last read stopped, and draws its read waiting", () => {
     const next = nextStep(d, null, summary());
@@ -500,7 +500,7 @@ describe("a dataset whose pseudonymise step ran (2026-10-17)", () => {
 describe("a dataset whose summary is not read yet (2026-10-17)", () => {
   // production: two identified datasets whose pseudonymise run had finished said "Waits to be pseudonymised" on their cards,
   // from the sources door's numbers alone, while their summaries took tens of seconds to read
-  const ran = { ...dataset().digests.recent[0], id: 9, pseudonymised: { files: 0, changed: 0, held: 0, job: 69 }, chain: { pseudonymize: 69, digest: 70, classify: [71] } };
+  const ran = { ...dataset().digests!.recent[0], id: 9, pseudonymised: { files: 0, changed: 0, held: 0, job: 69 }, chain: { pseudonymize: 69, digest: 70, classify: [71] } };
   const shape = (originals: number, copy: number, over: Partial<Dataset> = {}) =>
     dataset({
       state: "identified",

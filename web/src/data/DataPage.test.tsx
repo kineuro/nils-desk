@@ -14,13 +14,17 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
+import type { Capabilities } from "../capabilities";
 import { GRANTS, type Grant } from "../grants";
+import { next } from "../held";
 import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
-import type { Dataset } from "./datasets";
+import { forgetData, LIST, sourcesKept, whoOf } from "./kept";
+import { isCounted, type Dataset } from "./datasets";
 import { makingRefusal, nameRefusal } from "./NewCohort";
 import { STEP_RUN_DOORS } from "./stepRun";
-import { clock, type DatasetSummary, type SummaryStep } from "./summary";
+import { certainty, nextStep } from "./steps";
+import { cardLine, clock, railOf, stepsOfSources, type DatasetSummary, type SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -59,6 +63,7 @@ beforeEach(() => {
   root = createRoot(host);
 });
 afterEach(() => {
+  forgetData();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -123,19 +128,19 @@ const NO_MODEL = { reason: "no_model", error: "no post-contrast model is install
 const aside = (d: Dataset) => (d.name === "study-big" ? 3 : 0);
 
 function summaryOf(d: Dataset, running = false): DatasetSummary {
-  const scans = d.totals.stacks;
+  const scans = d.totals!.stacks;
   return {
     dataset: d.name,
     dataset_id: d.id,
     detail: "sensitive",
     state: d.name === "ward-c" ? "unknown" : "anonymised",
     added_at: AT,
-    subjects: d.totals.subjects,
-    sessions: d.totals.sessions,
-    studies: d.totals.studies,
+    subjects: d.totals!.subjects,
+    sessions: d.totals!.sessions,
+    studies: d.totals!.studies,
     scans,
-    sure: d.totals.sure ?? 0,
-    need_a_look: d.totals.to_sort,
+    sure: d.totals!.sure ?? 0,
+    need_a_look: d.totals!.to_sort,
     unsorted: 0,
     look_kinds: {},
     kinds: scans > 0 ? [{ kind: "T1w", scans: 16 }, { kind: "FLAIR", scans: 8 }] : [],
@@ -145,8 +150,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
       bytes: 5_000_000,
       read: 120,
       // record 56 (2026-10-11): what the read set aside by policy is counted among the refused, by kind, and asks nobody anything
-      refused: d.totals.refused_files + aside(d),
-      refused_batch: d.totals.refused_files > 0 ? 30 : null,
+      refused: d.totals!.refused_files + aside(d),
+      refused_batch: d.totals!.refused_files > 0 ? 30 : null,
       set_aside: aside(d),
       set_aside_kinds: aside(d) > 0 ? [{ kind: "screen_capture", words: "screen captures", count: 2 }, { kind: "pdf", words: "PDFs", count: 1 }] : [],
       // Nima, 2026-10-12: two of the three are of a subject with no stack in the dataset, which it does not count
@@ -172,8 +177,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
           ]
         : [
             step("found", { files: 120, tree: "anon" }),
-            step("read", { job: 4, files: 120, refused: d.totals.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
-            step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
+            step("read", { job: 4, files: 120, refused: d.totals!.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
+            step("sorted", { job: 6, scans, of: scans, look: d.totals!.to_sort, unsorted: 0 }),
             step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
             step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [], refusal: NO_MODEL }),
             step("main_scans", { job: 8, picked: 28, borders: 2 }),
@@ -389,6 +394,8 @@ describe("datasets and cohorts on one page", () => {
         expect(detail).not.toContain("at least");
       }
       act(() => root.unmount());
+      // a page drawn as in a new tab: nothing kept from the one before
+      forgetData();
       root = createRoot(host);
     }
   });
@@ -1000,6 +1007,430 @@ describe("datasets and cohorts on one page", () => {
   });
 });
 
+describe("what the page read last, kept between visits (2026-11-12)", () => {
+  /** An engine that answers nothing until it is let: every read out, and the answers given when the test says. */
+  function slow(list: Dataset[], cohortList: Cohort[] = cohorts) {
+    const out: { path: string; answer: () => void }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (input: RequestInfo | URL) =>
+          new Promise<Response>((done) => {
+            const url = new URL(String(input), "http://x");
+            const sum = /^\/api\/datasets\/([^/]+)\/summary$/.exec(url.pathname);
+            const d = sum ? list.find((x) => x.name === decodeURIComponent(sum[1])) : undefined;
+            const body = url.pathname === "/api/sources" ? { count: list.length, window_days: 30, sources: list, rates: null } : url.pathname === "/api/cohorts" ? cohortList : d ? summaryOf(d) : url.pathname === "/api/jobs" ? { count: 0, jobs: [] } : null;
+            out.push({ path: url.pathname, answer: () => done(new Response(JSON.stringify(body ?? { error: "no door" }), { status: body ? 200 : 404 })) });
+          }),
+      ),
+    );
+    return {
+      out,
+      asked: (path: string) => out.filter((o) => o.path === path).length,
+      /** The reads out of this door answered, or of every door. */
+      answer: async (path?: string) => {
+        const all = out.splice(0);
+        out.push(...all.filter((o) => path !== undefined && o.path !== path));
+        for (const o of all) if (path === undefined || o.path === path) o.answer();
+        await settle(10);
+      },
+    };
+  }
+  const draw = (caps: Capabilities = caps7a(DOORS, GRANTS)) => act(() => root.render(<DataPage caps={caps} install={null} onChanged={() => undefined} />));
+  const leave = () => {
+    act(() => root.unmount());
+    root = createRoot(host);
+  };
+  const names = (grid: string) => [...host.querySelectorAll(`.dp-grid.${grid} .dp-pick`)].map((b) => b.textContent);
+  const more = ds("ward-n", 11);
+
+  it("draws both lists, every summary and the chosen card at once on a second visit, nothing answered yet, then takes the fresh answers in place", async () => {
+    await page();
+    /** Both bands as drawn, card by card, and which dataset's detail stands under them. */
+    const drawn = () => [host.querySelector(".dp-grid.datasets")!.outerHTML, host.querySelector(".dp-grid.cohorts")!.outerHTML, host.querySelector(".dp-detail-name")?.textContent ?? null];
+    const first = drawn();
+    expect(text()).not.toContain("Reading where it is");
+    expect(host.querySelector(".dp-detail")).not.toBeNull();
+    leave();
+    // the second visit: the engine answers nothing yet, and says something else once it does
+    const renamed: Cohort[] = [...cohorts, { ...cohorts[0], name: "another-cohort" }];
+    const e = slow([done, looked, loose, more], renamed);
+    draw();
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    expect(drawn()).toEqual(first);
+    expect(host.querySelector(".dp-detail")).not.toBeNull();
+    // the summaries with them: no card and no detail says it is still reading where the dataset is
+    expect(text()).not.toContain("Reading where it is");
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c"]);
+    // all three are read again behind what is drawn
+    await settle();
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts"), e.out.filter((o) => o.path.endsWith("/summary") && o.path.startsWith("/api/datasets/")).length]).toEqual([1, 1, 3]);
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    // what is open and chosen stays as the answers land, on the cards that were drawn
+    const was = card("ward-f");
+    const picked = ["ward-f", "study-big"].find((name) => !card(name).classList.contains("on"))!;
+    act(() => (card(picked).querySelector(".dp-pick") as HTMLButtonElement).click());
+    expect(card(picked).classList.contains("on")).toBe(true);
+    const chosen = host.querySelector(".dp-detail")!;
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c", "ward-n"]);
+    expect(names("cohorts")).toContain("another-cohort");
+    expect(card("ward-f")).toBe(was);
+    expect(host.querySelector(".dp-detail")).toBe(chosen);
+    expect(card(picked).classList.contains("on")).toBe(true);
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    // and the dataset new to the list has its summary read
+    expect(e.asked("/api/datasets/ward-n/summary")).toBe(1);
+  });
+
+  it("waits on a first visit only, and keeps an answer that comes after the page went", async () => {
+    const e = slow([done, looked]);
+    draw();
+    await settle();
+    expect(host.querySelector(".wait-panel")?.textContent).toContain("reading the datasets");
+    // the person goes before anything answered
+    leave();
+    await e.answer();
+    slow([done, looked]);
+    draw();
+    expect(host.querySelector(".wait-panel")).toBeNull();
+    expect(names("datasets")).toEqual(["ward-f", "study-big"]);
+    expect(names("cohorts").length).toBe(cohorts.length);
+  });
+
+  it("never lands a slow older answer over a newer one", async () => {
+    // the first visit's reads stay out
+    const old = slow([done]);
+    draw();
+    await settle();
+    leave();
+    // the second visit's are answered first
+    const now = slow([done, looked, more]);
+    draw();
+    await settle();
+    await now.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    // then the first visit's answers come, older than what is kept
+    await old.answer();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(sourcesKept.get(whoOf(caps7a(DOORS, GRANTS)))[LIST].map((d) => d.name)).toEqual(["ward-f", "study-big", "ward-n"]);
+    leave();
+    slow([]);
+    draw();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+  });
+
+  it("keeps what the page reads again after it did something", async () => {
+    let listed = [done, looked];
+    let made: Cohort[] = cohorts;
+    await page({
+      route: (c) => {
+        const path = new URL(c.url, "http://x").pathname;
+        if (c.method === "POST" && path === "/api/cohorts") return { status: 201, body: { name: "fresh" } };
+        if (c.method === "GET" && path === "/api/sources") return { status: 200, body: { count: listed.length, window_days: 30, sources: listed, rates: null } };
+        if (c.method === "GET" && path === "/api/cohorts") return { status: 200, body: made };
+        return undefined;
+      },
+    });
+    expect(names("datasets")).toEqual(["ward-f", "study-big"]);
+    // a cohort made from the page's head: the page reads everything again, as after anything it did
+    listed = [done, looked, more];
+    made = [...cohorts, { ...cohorts[0], name: "fresh" }];
+    act(() => (host.querySelector(".data-head .button.secondary") as HTMLButtonElement).click());
+    const input = document.querySelector<HTMLInputElement>('dialog input[placeholder="ms-followup"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "fresh");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => [...document.querySelectorAll<HTMLButtonElement>("dialog button")].find((b) => b.textContent === "Make the cohort")!.click());
+    await settle(10);
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(names("cohorts")).toContain("fresh");
+    // and the next visit draws what those reads brought
+    leave();
+    slow([]);
+    draw();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-n"]);
+    expect(names("cohorts")).toContain("fresh");
+  });
+
+  it("shows another account nothing of what the first one's page kept, nor a person signed out, nor one whose grants changed", async () => {
+    await page();
+    expect(names("datasets")).toEqual(["ward-f", "study-big", "ward-c"]);
+    const others: ((c: Capabilities) => void)[] = [
+      (c) => {
+        c.person.subject = "birgit";
+        c.engine!.principal = "birgit";
+      },
+      (c) => void (c.desk.signed_in = false),
+      (c) => void (c.person.grants = c.person.grants.filter((g) => g !== "data:work")),
+    ];
+    for (const change of others) {
+      leave();
+      forgetData();
+      await page();
+      leave();
+      const other = caps7a(DOORS, GRANTS);
+      change(other);
+      const e = slow([more]);
+      draw(other);
+      expect(host.querySelector(".wait-panel")?.textContent).toContain("reading the datasets");
+      expect(text()).not.toMatch(/ward-f|study-big|ward-c|ms-followup/);
+      // and what the other one reads is theirs: the first, back, is shown none of it
+      await settle();
+      await e.answer();
+      expect(names("datasets")).toEqual(["ward-n"]);
+      leave();
+      slow([]);
+      draw();
+      expect(host.querySelector(".wait-panel")).not.toBeNull();
+      expect(text()).not.toContain("ward-n");
+    }
+  });
+
+  it("sends no second read for an epoch that moves while the arrival's reads are out", async () => {
+    const e = slow([done]);
+    draw();
+    await settle();
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts")]).toEqual([1, 1]);
+    const moved = caps7a(DOORS, GRANTS);
+    draw({ ...moved, engine: { ...moved.engine!, registry: { ...moved.engine!.registry, epoch: 2 } } });
+    await settle();
+    // the reads that are out answer for the move
+    expect([e.asked("/api/sources"), e.asked("/api/cohorts")]).toEqual([1, 1]);
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-f"]);
+  });
+
+  it("takes up the other account in a page that stays open, and reads for it", async () => {
+    await page();
+    const other = caps7a(DOORS, GRANTS);
+    other.person.subject = "birgit";
+    const e = slow([more]);
+    draw(other);
+    expect(text()).not.toMatch(/ward-f|study-big|ward-c/);
+    expect(host.querySelector(".wait-panel")).not.toBeNull();
+    await settle();
+    await e.answer();
+    await e.answer();
+    expect(names("datasets")).toEqual(["ward-n"]);
+    expect(text()).not.toContain("Reading where it is");
+  });
+});
+
+describe("the shell's reads of the capabilities (2026-11-12)", () => {
+  const lists = (e: { calls: Call[] }) => e.calls.map((c) => new URL(c.url, "http://x").pathname).filter((p) => p === "/api/sources" || p === "/api/cohorts");
+  const again = (caps: Capabilities) => {
+    act(() => root.render(<DataPage caps={caps} install={null} onChanged={() => undefined} />));
+    return settle(10);
+  };
+
+  it("reads neither list again when the capabilities are read again and say the same", async () => {
+    const e = await page();
+    expect(lists(e).sort()).toEqual(["/api/cohorts", "/api/sources"]);
+    const asked = e.calls.length;
+    // the shell's next reads: a new object each time that says the same, and one whose engine counted its uptime on
+    await again(caps7a(DOORS, GRANTS));
+    const counted = caps7a(DOORS, GRANTS);
+    await again({ ...counted, engine: { ...counted.engine!, uptime_seconds: 4_000 } });
+    expect(lists(e)).toHaveLength(2);
+    // nor anything else: no summary, no job, no pick
+    expect(e.calls.slice(asked).map((c) => c.url)).toEqual([]);
+  });
+
+  it("reads both lists and each dataset's summary once when the registry's epoch moves, and nothing while it stands", async () => {
+    const e = await page();
+    const sums = () => e.calls.filter((c) => /^\/api\/datasets\/[^/]+\/summary$/.test(new URL(c.url, "http://x").pathname)).length;
+    // the arrival: each list and each summary once, the epoch it arrived with no second reason
+    expect([lists(e).sort(), sums()]).toEqual([["/api/cohorts", "/api/sources"], 3]);
+    const at = (epoch: number, uptime: number): Capabilities => {
+      const c = caps7a(DOORS, GRANTS);
+      return { ...c, engine: { ...c.engine!, uptime_seconds: uptime, registry: { ...c.engine!.registry, epoch } } };
+    };
+    // somebody else, or a command line, wrote the registry
+    await again(at(2, 15));
+    expect([lists(e).sort(), sums()]).toEqual([["/api/cohorts", "/api/cohorts", "/api/sources", "/api/sources"], 6]);
+    // the shell's next reads say the same epoch: nothing at all is read
+    const asked = e.calls.length;
+    await again(at(2, 30));
+    await again(at(2, 45));
+    expect(e.calls.slice(asked).map((c) => c.url)).toEqual([]);
+    // and the next move reads once more
+    await again(at(3, 60));
+    expect([lists(e).length, sums()]).toEqual([6, 9]);
+  });
+
+  it("hands the page one object across the shell's reads that say the same", async () => {
+    const first = next({ kind: "loading" }, { caps: caps7a(DOORS, GRANTS) }, 0);
+    const second = next(first, { caps: caps7a(DOORS, GRANTS) }, 15_000);
+    expect(first.kind === "ready" && second.kind === "ready" && first.caps === second.caps).toBe(true);
+  });
+
+  it("reads them again when what the person may read changed", async () => {
+    const e = await page({ doors: DOORS.filter((d) => d !== "GET /api/cohorts") });
+    expect(lists(e)).toEqual(["/api/sources"]);
+    // the engine now serves the cohorts
+    await again(caps7a(DOORS, GRANTS));
+    expect(lists(e).sort()).toEqual(["/api/cohorts", "/api/sources", "/api/sources"]);
+    expect(host.querySelector(".dp-grid.cohorts")).not.toBeNull();
+  });
+});
+
+describe("lists the engine keeps and counts again apart (2026-11-12)", () => {
+  const reads = (e: { calls: Call[] }, path: string) => e.calls.filter((c) => c.method === "GET" && new URL(c.url, "http://x").pathname === path).length;
+  const isList = (c: Call, path: string) => c.method === "GET" && new URL(c.url, "http://x").pathname === path;
+  /** The three numbers of a dataset's card: files, subjects, scans. */
+  const nums = (name: string) => [...card(name).querySelectorAll(".dp-nums b")].map((b) => b.textContent);
+  /** A dataset asked at once before its first count: its place and dataset fields, and none of its counts. */
+  const uncounted = (name: string, id: number): Dataset => {
+    const d = { ...ds(name, id), counted: false, counting: true, counts_as_of: null, trees: { originals: null, anon: { path: `/srv/in/${name}/derivatives/dcm-anon`, files: null, last_written: null } } } as Dataset;
+    delete d.held;
+    delete d.digests;
+    delete d.totals;
+    return d;
+  };
+  const sourcesOf = (list: Dataset[], counting?: boolean) => ({ status: 200, body: { count: list.length, window_days: 30, sources: list, rates: null, ...(counting === undefined ? {} : { counting, counts_as_of: AT }) } });
+
+  it("asks the datasets at once, and follows neither list of an engine that says nothing of counting", async () => {
+    ownClock();
+    const e = await page();
+    expect(e.of("GET", "/api/sources?recent=12&at_once=1")).toHaveLength(1);
+    // its answer has none of the new words, and is drawn as before
+    expect(nums("study-big")).toEqual(["120", "12", "40"]);
+    expect(card("study-big").querySelector(".dp-line")?.textContent).toBe("32 sure · 8 need a look");
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([1, 1]);
+  }, CLOCKED);
+
+  it("reads the datasets again a while after each answer that says counting, until one says so no more", async () => {
+    ownClock();
+    const kept = { ...looked, counted: true, counting: true, counts_as_of: AT };
+    const fresh = { ...looked, totals: { ...looked.totals!, stacks: 44 }, counted: true, counting: false, counts_as_of: "2026-11-12T08:00:00Z" };
+    let asked = 0;
+    const e = await page({
+      list: [done, looked],
+      route: (c) => {
+        if (!isList(c, "/api/sources")) return undefined;
+        asked += 1;
+        return asked < 3 ? sourcesOf([done, kept], true) : sourcesOf([done, fresh], false);
+      },
+    });
+    // the kept counts at once
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([1, "40"]);
+    await after(5_000);
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([2, "40"]);
+    // the fresh ones land, and the list is followed no more
+    await after(5_000);
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([3, "44"]);
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([3, 1]);
+  }, CLOCKED);
+
+  it("reads the cohorts again while one of them says counting, until none does", async () => {
+    ownClock();
+    let asked = 0;
+    const e = await page({
+      route: (c) => {
+        if (!isList(c, "/api/cohorts")) return undefined;
+        asked += 1;
+        return { status: 200, body: asked < 2 ? [{ ...cohorts[0], counting: true, counts_as_of: AT }, { ...cohorts[1], counting: false, counts_as_of: AT }] : [{ ...cohorts[0], subjects: 18, counting: false, counts_as_of: "2026-11-12T08:00:00Z" }, cohorts[1]] };
+      },
+    });
+    const big = () => host.querySelector(".dp-grid.cohorts .dp-card .dp-big b")?.textContent;
+    expect([reads(e, "/api/cohorts"), big()]).toEqual([1, "16"]);
+    await after(5_000);
+    expect([reads(e, "/api/cohorts"), big()]).toEqual([2, "18"]);
+    await after(60_000);
+    expect([reads(e, "/api/cohorts"), reads(e, "/api/sources")]).toEqual([2, 1]);
+  }, CLOCKED);
+
+  it("follows a list no more once the page has gone", async () => {
+    ownClock();
+    const e = await page({
+      list: [done, looked],
+      route: (c) => (isList(c, "/api/sources") ? sourcesOf([done, { ...looked, counted: true, counting: true, counts_as_of: AT }], true) : isList(c, "/api/cohorts") ? { status: 200, body: [{ ...cohorts[0], counting: true, counts_as_of: AT }] } : undefined),
+    });
+    await after(5_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([2, 2]);
+    act(() => root.unmount());
+    root = createRoot(host);
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([2, 2]);
+  }, CLOCKED);
+
+  it("draws a dataset that came without its counts as being counted, never a zero, and takes its counts when they land", async () => {
+    ownClock();
+    let counted = false;
+    const e = await page({
+      list: [done, ds("ward-u", 12)],
+      query: { dataset: "ward-u" },
+      route: (c) => {
+        if (counted) return undefined;
+        if (isList(c, "/api/sources")) return sourcesOf([done, uncounted("ward-u", 12)], true);
+        if (isList(c, "/api/datasets/ward-u/summary")) return { status: 200, body: { dataset: "ward-u", counted: false, counting: true, count: { what: "files", place: "ward-u", done: 1200, since: AT } } };
+        return undefined;
+      },
+    });
+    const c = () => card("ward-u");
+    const d = () => host.querySelector<HTMLElement>(".dp-detail")!;
+    // its card stands with its name and what its structure says, and says the count
+    expect(c().querySelector(".dp-pick")?.textContent).toBe("ward-u");
+    expect(c().querySelector(".dp-card-head .tag")?.textContent).toBe("Ready");
+    expect(nums("ward-u")).toEqual(["?", "?", "?"]);
+    expect(c().querySelector(".dp-first")?.textContent).toBe("Counting files in ward-u: 1,200 so far");
+    expect([...c().querySelectorAll(".dp-rail span")].map((x) => x.className)).toEqual(Array(6).fill("unknown"));
+    // nothing to view is known of: View stands and opens nothing
+    expect(c().querySelector("a.dp-view")).toBeNull();
+    // its detail the same: no step offered on a guess, no count of nothing
+    expect(d().querySelector(".dp-detail-name")?.textContent).toBe("ward-u");
+    const primary = () => [...d().querySelectorAll<HTMLButtonElement>(".dp-acts button.button")].filter((b) => !b.classList.contains("secondary"));
+    expect(primary().map((b) => [b.textContent, b.disabled])).toEqual([["Counting", true]]);
+    expect(d().querySelector(".dp-first")?.textContent).toBe("Counting files in ward-u: 1,200 so far.");
+    expect(d().textContent).toContain("Not counted yet.");
+    const said = `${c().textContent} ${d().textContent}`;
+    for (const words of ["Not read yet", "Nothing read yet", "No scans found"]) expect(said).not.toContain(words);
+    expect(said).not.toMatch(/(^|\D)0 ?(files|subjects|visits|scans)/);
+    // the other dataset is drawn with its counts beside it
+    expect(nums("ward-f")).toEqual(["120", "12", "30"]);
+    // the list is read again a while after, and the counts land
+    counted = true;
+    await after(5_000);
+    expect(reads(e, "/api/sources")).toBe(2);
+    expect(nums("ward-u")).toEqual(["120", "12", "30"]);
+    expect(c().querySelector(".dp-first")).toBeNull();
+    expect(d().textContent).not.toContain("Not counted yet.");
+    expect(primary().map((b) => b.textContent)).not.toContain("Counting");
+    await after(60_000);
+    expect(reads(e, "/api/sources")).toBe(2);
+  }, CLOCKED);
+
+  it("says the count in the list's own words where no summary of the dataset is read", async () => {
+    await page({ doors: DOORS.filter((x) => x !== "GET /api/datasets/{name}/summary"), list: [uncounted("ward-u", 12)], query: { dataset: "ward-u" } });
+    expect(nums("ward-u")).toEqual(["?", "?", "?"]);
+    expect(card("ward-u").querySelector(".dp-line")?.textContent).toBe("Counting scans and files");
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.querySelector(".dp-first")?.textContent).toBe("Counting scans and files.");
+    expect(d.querySelectorAll(".dp-step")).toHaveLength(0);
+    expect(d.textContent).toContain("Not counted yet.");
+    for (const words of ["Not read yet", "Nothing read yet", "No scans found"]) expect(host.textContent).not.toContain(words);
+  });
+
+  it("says of a dataset without its counts only what its structure says", () => {
+    const u = uncounted("ward-u", 12);
+    expect([isCounted(u), isCounted(done)]).toEqual([false, true]);
+    expect(nextStep(u, null)).toEqual({ word: "Ready", step: "counting", label: "Counting", busy: true });
+    expect(railOf(u, null)).toEqual(Array(6).fill("unknown"));
+    expect(cardLine(u, nextStep(u, null), null)).toBe("Counting scans and files");
+    expect(certainty(u)).toBeNull();
+    expect(stepsOfSources(u)).toEqual([]);
+    // loose files are sorted into their folder first, counted or not
+    expect(nextStep({ ...u, arrives: "undeclared" }, null).step).toBe("sort-files");
+    // one being counted asks nobody anything: the first card chosen is one that does
+    expect(firstChoice([u, looked], () => null, [])).toEqual({ kind: "dataset", name: "study-big" });
+    expect(firstChoice([u], () => null, [])).toEqual({ kind: "dataset", name: "ward-u" });
+  });
+});
+
 describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
   // read once, cancelled part way, as an update cancels it: its stacks are not all there to sort, and nothing was sorted yet
   const cut = { id: 91, name: "ward-s-2026-10-16", state: "cancelled", started_at: AT, finished_at: AT, job_id: 72, files: { seen: 100250, new: 100250, changed: 0, unchanged: 0, refused: 0 }, subjects_added: 12, stacks_added: 30, classified: 0, to_sort: 0 };
@@ -1061,6 +1492,8 @@ describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
     expect(primary().map((b) => b.textContent)).toEqual(["Sort"]);
     expect(card("ward-s").querySelector(".dp-line")?.textContent).not.toBe("The last read stopped part way");
     act(() => root.unmount());
+    // a page drawn as in a new tab: nothing kept from the one before
+    forgetData();
     root = createRoot(host);
     const reading = ds("ward-s", 9, { ...stopped, digests: { count: 2, first: null, last: null, recent: [{ ...cut, id: 92, state: "running", finished_at: null }, cut] } });
     await page({ list: [reading] });

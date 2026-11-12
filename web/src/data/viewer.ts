@@ -7,7 +7,7 @@
 // engine's doors and what they answer; and the words a card says. Subjects,
 // never people (Nima, 2026-10-09).
 
-import { door } from "../ask/client";
+import { door, DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -35,7 +35,7 @@ export interface ViewState {
   subject: number | null;
   /** The visit open: `s<session>` for a session the engine keeps, `t<study>.<study>` for one it does not. */
   visit: string | null;
-  /** The scan the browser shows. */
+  /** The scan shown: the browser's, or the one open in the grid's own viewer over its visit. */
   scan: number | null;
   /** The subjects' search, held in memory for the page (searchOf), never in the address. */
   q: string;
@@ -193,7 +193,12 @@ export interface SubjectsPage {
   subjects: Subject[];
   next: number | null;
   facets: { makers: Facet[]; regions: Facet[]; roles: Facet[]; idTypes: Facet[] };
+  /** The engine answered the facts it kept and reads them again (2026-11-12); false from an engine that reads on every request. */
+  counting: boolean;
 }
+
+/** How long after a `counting` answer the subjects are asked again: sooner at first, then every half minute while the engine goes on reading. */
+export const COUNTING_AGAIN_MS = [3_000, 6_000, 12_000, 30_000];
 
 /** One visit as its card draws it. */
 export interface Visit {
@@ -254,6 +259,7 @@ export function subjectsOf(a: Json): SubjectsPage {
     })),
     next: nul(a.next),
     facets: { makers: facets(f.makers), regions: facets(f.regions), roles: facets(f.roles), idTypes: facets(f.id_types) },
+    counting: a.counting === true,
   };
 }
 
@@ -350,13 +356,41 @@ interface ScansAnswer {
   pictures?: unknown;
 }
 
+/**
+ * The order of what subjects are shown by (2026-11-12): their subject codes ascending, or the shown ID type's values
+ * in natural order, the subjects without one last. The default, since an order by what needs a look read as no order
+ * at all beside the names.
+ */
+export const ID_ORDER = "id";
+
+/** How long a refusal of `order=id` is believed: an engine updated under an open page is asked again after it. */
+export const ID_ORDER_REFUSED_FOR = 10 * 60_000;
+let idOrderRefused: number | null = null;
+
+/** Whether the engine's refusal is of the order's word: "order: id is not look, code, visits or scans". */
+const refusesOrder = (e: unknown) => e instanceof DoorError && e.status === 400 && e.message.startsWith("order:");
+
 export const viewerDoors = {
+  /**
+   * A page of subjects. An engine before `order=id` refuses the word, and neither its contract number nor its
+   * capabilities say which it is, so the refusal itself is what tells: the code's order is asked in its place, the
+   * same order wherever subjects are shown by their subject code, and the engine is not asked `id` again for a while.
+   */
   subjects: (scope: Scope, ask: SubjectsAsk, after: number | null = null): Promise<SubjectsPage> => {
-    const q = new URLSearchParams({ limit: String(SUBJECTS_PAGE), order: ask.order, show: ask.show });
-    if (ask.q.trim() !== "") q.set("q", ask.q.trim());
-    if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
-    if (after !== null) q.set("after", String(after));
-    return door<Json>("GET", `${paths(scope).subjects}?${q}`).then(subjectsOf);
+    const read = (order: string) => {
+      const q = new URLSearchParams({ limit: String(SUBJECTS_PAGE), order, show: ask.show });
+      if (ask.q.trim() !== "") q.set("q", ask.q.trim());
+      if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
+      if (after !== null) q.set("after", String(after));
+      return door<Json>("GET", `${paths(scope).subjects}?${q}`).then(subjectsOf);
+    };
+    if (ask.order !== ID_ORDER) return read(ask.order);
+    if (idOrderRefused !== null && Date.now() - idOrderRefused < ID_ORDER_REFUSED_FOR) return read("code");
+    return read(ID_ORDER).catch((e: unknown) => {
+      if (!refusesOrder(e)) throw e;
+      idOrderRefused = Date.now();
+      return read("code");
+    });
   },
   visits: (scope: Scope, subject: number, ask: { name: string; show: string; filter: string[] }): Promise<VisitsPage> => {
     const q = new URLSearchParams({ name: ask.name, show: ask.show });
@@ -748,7 +782,9 @@ export function step(spots: Spot[], at: number, key: "ArrowLeft" | "ArrowRight" 
 export const KEPT = {
   show: "nils.viewer.show",
   visits: "nils.viewer.visits",
-  order: "nils.viewer.order",
+  // a second key (2026-11-12): the order of what subjects are shown by became the default, and a choice kept under the
+  // first key, mostly the old default itself, would have held everybody on the old order; nothing reads the first key now
+  order: "nils.viewer.order.2",
   colour: "nils.viewer.colour",
   names: "nils.dataset-view.names",
 } as const;
@@ -814,6 +850,7 @@ export function forgetHeld(): void {
   searches.clear();
   downs = [];
   searchAsked = false;
+  idOrderRefused = null;
 }
 
 const scopeKey = (s: Scope) => `${s.kind}:${s.name}`;
@@ -833,7 +870,7 @@ export const lastSubjectKey = (s: Scope) => `subject|${scopeKey(s)}`;
 export const lastVisitKey = (s: Scope, subject: number) => `visit|${scopeKey(s)}|${subject}`;
 export const lastScanKey = (s: Scope, visit: string) => `scan|${scopeKey(s)}|${visit}`;
 
-/** An address without the scan it names: the grid's level is the same whichever scan its cursor is on. */
+/** An address without the scan it names: a level is the same whichever scan is open on it. */
 export const levelOfForTest = (hash: string) => levelOf(hash);
 function levelOf(hash: string): string {
   const r = parse(hash);

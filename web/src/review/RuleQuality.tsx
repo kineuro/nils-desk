@@ -46,15 +46,19 @@ const count = (pairs: number, stacks: number) => (pairs === 0 ? "none" : `${n(pa
 export function RuleQuality({ caps, pack, dataset = null, onMend, onOpen }: QualityProps) {
   const [load, setLoad] = useState<Load>(() => (readsQuality(caps) ? { kind: "loading", since: Date.now() } : { kind: "absent" }));
   const name = pack?.pack ?? null;
+  // 2026-11-12: read again when what is read changes, not whenever the shell read the capabilities again and
+  // handed on a new object, which put the wait back over the report each time
+  const reads = readsQuality(caps);
+  const reports = served(caps, DOORS.quality);
   useEffect(() => {
-    if (!name || !readsQuality(caps)) {
+    if (!name || !reads) {
       setLoad({ kind: "absent" });
       return;
     }
     let alive = true;
     setLoad({ kind: "loading", since: Date.now() });
     // the report where the engine gathers it; from an engine before it, the ties alone
-    const read: Promise<{ value: Quality; report: boolean }> = served(caps, DOORS.quality)
+    const read: Promise<{ value: Quality; report: boolean }> = reports
       ? rulesDoors.quality(name, dataset).then((value) => ({ value, report: true }))
       : rulesDoors.ties(name).then((ties) => ({ value: { stacks: 0, ties, overrides: { stacks: 0, overrides: [] }, system1: { served: false, model: null, why: null, rows: [] } }, report: false }));
     read.then(
@@ -64,7 +68,7 @@ export function RuleQuality({ caps, pack, dataset = null, onMend, onOpen }: Qual
     return () => {
       alive = false;
     };
-  }, [caps, name, dataset]);
+  }, [reads, reports, name, dataset]);
 
   if (load.kind === "loading") return <Wait phase="reading the pack's quality" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">The pack's quality could not be read: {load.why}</p>;

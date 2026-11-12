@@ -80,7 +80,7 @@ function caps(over: Partial<Capabilities["engine"] & object> = {}): Capabilities
 function older(d: Dataset): Dataset {
   const { arrives, trees, identity, unmapped, cohort, tags, held, originals_kept, ...rest } = d;
   void [arrives, trees, identity, unmapped, cohort, tags, held, originals_kept];
-  return { ...rest, digests: { ...rest.digests, recent: rest.digests.recent.map((b) => ({ ...b, pseudonymised: undefined, chain: undefined })) } };
+  return { ...rest, digests: { ...rest.digests!, recent: rest.digests!.recent.map((b) => ({ ...b, pseudonymised: undefined, chain: undefined })) } };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -89,10 +89,10 @@ describe("a dataset's card", () => {
   it("leads with reading, then what is held, what waits, not read, not sorted, then up to date", () => {
     expect(datasetState(incoming)).toEqual({ words: "4 need a subject code", tone: "caution" });
     expect(datasetState({ ...incoming, held: { files: 0, identifiers: 0 } })).toEqual({ words: "12 to sort", tone: "caution" });
-    expect(datasetState({ ...incoming, digests: { ...incoming.digests, recent: [{ ...incoming.digests.recent[0], state: "running" }] } })).toEqual({ words: "reading now", tone: "brand" });
+    expect(datasetState({ ...incoming, digests: { ...incoming.digests!, recent: [{ ...incoming.digests!.recent[0], state: "running" }] } })).toEqual({ words: "reading now", tone: "brand" });
     expect(datasetState(exchange)).toEqual({ words: "not sorted", tone: "neutral" });
     expect(datasetState({ ...exports, digests: { count: 0, first: null, last: null, recent: [] } })).toEqual({ words: "not read yet", tone: "neutral" });
-    expect(datasetState({ ...exports, digests: { ...exports.digests, recent: [{ ...exports.digests.recent[0], classified: 1433 }] } })).toEqual({ words: "up to date", tone: "ok" });
+    expect(datasetState({ ...exports, digests: { ...exports.digests!, recent: [{ ...exports.digests!.recent[0], classified: 1433 }] } })).toEqual({ words: "up to date", tone: "ok" });
     // an older engine says nothing of held files, and the card reads as before
     expect(datasetState(older(incoming))).toEqual({ words: "12 to sort", tone: "caution" });
   });
@@ -145,8 +145,8 @@ describe("a dataset's card", () => {
   it("ends with its newest batch: what was pseudonymised, the new subjects, what is held", () => {
     // the newest batch started today, at a time the browser's own clock draws
     expect(lastLine(incoming, now)).toMatch(/^today \d\d:\d\d: 2,208 files pseudonymised · 38 new subjects · 4 files need a subject code$/u);
-    expect(batchLine(incoming.digests.recent[1], now)).toBe("20 Aug: 2,208 files pseudonymised · 41 new subjects");
-    expect(batchLine({ ...incoming.digests.recent[1], pseudonymised: { files: 0, changed: 14, held: 0, job: 76 } }, now)).toBe("20 Aug: 14 files changed, pseudonymised again · 41 new subjects");
+    expect(batchLine(incoming.digests!.recent[1], now)).toBe("20 Aug: 2,208 files pseudonymised · 41 new subjects");
+    expect(batchLine({ ...incoming.digests!.recent[1], pseudonymised: { files: 0, changed: 14, held: 0, job: 76 } }, now)).toBe("20 Aug: 14 files changed, pseudonymised again · 41 new subjects");
     // an older engine's batch counts its files as before
     expect(lastLine(older(incoming), now)).toMatch(/^today \d\d:\d\d: 2,208 new · 38 new subjects$/u);
     expect(lastLine({ ...exports, digests: { count: 0, first: null, last: null, recent: [] } }, now)).toBe("not read yet");
@@ -154,7 +154,7 @@ describe("a dataset's card", () => {
 });
 
 describe("the five marks of a batch", () => {
-  const [newest, earlier] = incoming.digests.recent;
+  const [newest, earlier] = incoming.digests!.recent;
   it("read the batch's stages when the engine gives them", () => {
     const stages = (stagesFixture as { stages: BatchStages }).stages;
     expect(stripMarks(newest, stages).map((m) => [m.name, m.mark, m.words])).toEqual([
@@ -179,16 +179,16 @@ describe("the five marks of a batch", () => {
     expect(stripMarks(earlier)[0].words).toBe("2,222 files");
   });
   it("leave the first mark absent where the engine says nothing of it", () => {
-    const old = older(incoming).digests.recent[1];
+    const old = older(incoming).digests!.recent[1];
     expect(stripMarks(old).map((m) => m.mark)).toEqual(["none", "done", "done", "done", "wait"]);
-    expect(stripMarks(exchange.digests.recent[0])[0]).toEqual({ name: "pseudonymised", mark: "none", words: "not said" });
+    expect(stripMarks(exchange.digests!.recent[0])[0]).toEqual({ name: "pseudonymised", mark: "none", words: "not said" });
   });
   it("name the jobs of the thread by stage, so a page walks from a digest to what wrote and sorted it", () => {
     expect(chainJobs(newest.chain)).toEqual([120, 121]);
     expect(chainJobs(earlier.chain)).toEqual([76, 77, 78, 79]);
-    expect(chainJobs(exchange.digests.recent[0].chain)).toEqual([50]);
+    expect(chainJobs(exchange.digests!.recent[0].chain)).toEqual([50]);
     // an older engine names none
-    expect(chainJobs(older(incoming).digests.recent[0].chain)).toEqual([]);
+    expect(chainJobs(older(incoming).digests!.recent[0].chain)).toEqual([]);
     expect(chainJobs(null)).toEqual([]);
   });
   it("offer the held files, what to sort, a read again, or say it is sorted", () => {

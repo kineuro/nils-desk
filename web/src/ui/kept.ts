@@ -10,6 +10,14 @@
 // could land after a newer one. A page reads each thing once at a time, reads
 // a thing it follows again a while after the last answer, and lets go of an
 // answer to a read it let go of.
+//
+// And what such reads brought, kept between visits (2026-11-12): a page that
+// held its lists in its own state waited for every one of them on each
+// arrival, seconds each on a large registry. A shelf keeps what a page's reads
+// brought, by key, for the person they were read for; the page draws from it
+// at once and reads again behind. An answer is placed by when its read was
+// sent, so a slow older one never lands over a newer one, whichever visit
+// sent it; and what was kept for one person is never handed to another.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -272,4 +280,90 @@ export function useReads<T>(read: (key: string) => Promise<T>, got: (key: string
     return () => r.stop();
   }, [r]);
   return r;
+}
+
+/**
+ * What a page's reads brought, by key, kept between its visits for one
+ * person. `who` says the person and what they may read; a page takes the
+ * shelf up for them on arrival, which lets go of what was kept for anyone
+ * else, and nothing is handed out or kept under another `who` than that one.
+ */
+export interface Shelf<T> {
+  /** What is kept for this person, by key: the same object until something changes, and nothing where it was kept for another. */
+  get(who: string): Readonly<Record<string, T>>;
+  subscribe(listener: () => void): () => void;
+  /** The shelf taken up for this person; what was kept for another is let go. */
+  take(who: string): void;
+  /** The number a read takes as it is sent, which places its answer among the others. */
+  sent(): number;
+  /** Keep the answer to the read sent as `sent`; refused under another person than the shelf's, and where the answer to a read sent later is kept already. */
+  land(who: string, key: string, sent: number, value: T): boolean;
+  /** Let go of a key. */
+  drop(who: string, key: string): void;
+  /** Let go of every key but these. */
+  only(who: string, keys: ReadonlySet<string>): void;
+  /** Let go of everything, whoever it was kept for. */
+  forget(): void;
+}
+
+const NOTHING: Readonly<Record<string, never>> = Object.freeze({});
+// one count for the reads of every shelf, so answers kept on two shelves are placed alike
+let sentSoFar = 0;
+
+export function shelf<T>(): Shelf<T> {
+  let owner: string | null = null;
+  let kept: Readonly<Record<string, T>> = NOTHING;
+  /** The number of the read whose answer each key holds, or held last. */
+  let placed = new Map<string, number>();
+  const listeners = new Set<() => void>();
+  const set = (next: Readonly<Record<string, T>>) => {
+    kept = next;
+    for (const l of [...listeners]) l();
+  };
+  const clear = () => {
+    placed = new Map();
+    if (kept !== NOTHING) set(NOTHING);
+  };
+  return {
+    get: (who) => (owner === who ? kept : NOTHING),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+    take: (who) => {
+      if (owner === who) return;
+      owner = who;
+      clear();
+    },
+    sent: () => ++sentSoFar,
+    land: (who, key, sent, value) => {
+      if (owner !== who || sent < (placed.get(key) ?? 0)) return false;
+      placed.set(key, sent);
+      set({ ...kept, [key]: value });
+      return true;
+    },
+    drop: (who, key) => {
+      if (owner !== who || !(key in kept)) return;
+      const { [key]: _gone, ...rest } = kept;
+      set(rest);
+    },
+    only: (who, keys) => {
+      if (owner !== who || Object.keys(kept).every((k) => keys.has(k))) return;
+      for (const k of placed.keys()) if (!keys.has(k)) placed.delete(k);
+      set(Object.fromEntries(Object.entries(kept).filter(([k]) => keys.has(k))));
+    },
+    forget: () => {
+      owner = null;
+      clear();
+    },
+  };
+}
+
+/** What a shelf keeps for this person, drawn again when it changes. */
+export function useShelf<T>(s: Shelf<T>, who: string): Readonly<Record<string, T>> {
+  return useSyncExternalStore(
+    s.subscribe,
+    () => s.get(who),
+    () => s.get(who),
+  );
 }

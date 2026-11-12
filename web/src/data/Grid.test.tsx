@@ -6,7 +6,8 @@
 // one visit's scans in folders by datatype that fold, each family outlined in
 // its colour, coloured by contrast on a choice; the keyboard (arrows, Enter,
 // Esc up a level, / and g); a cohort over its members; and the browser alone
-// where the engine has no subjects door.
+// where the engine has no subjects door. A scan opened in the grid's own
+// viewer is GridViewer.test.tsx's.
 
 import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -68,7 +69,7 @@ const page = (subjects: unknown[], over: Record<string, unknown> = {}) => ({
   scope: { kind: "dataset", name: "ms-a", id: 7 },
   detail: "quasi",
   show: "code",
-  order: "look",
+  order: "id",
   totals: { subjects: 3, visits: 4, scans: 30, look: 3 },
   matched: subjects.length,
   count: subjects.length,
@@ -259,7 +260,7 @@ describe("the dataset viewer's grid", () => {
 
   it("shows the subjects as folders with their counts, their facts and what to look at, and no pictures", async () => {
     await open("#data/datasets/ms-a/view");
-    expect(asked("/api/datasets/ms-a/subjects")).toEqual(["/api/datasets/ms-a/subjects?limit=60&order=look&show=code"]);
+    expect(asked("/api/datasets/ms-a/subjects")).toEqual(["/api/datasets/ms-a/subjects?limit=60&order=id&show=code"]);
     expect(el.querySelector(".vw-title h1")?.textContent).toBe("ms-a");
     expect(el.querySelector(".vw-title .vw-sum")?.textContent).toBe("3 subjects · 4 visits · 30 scans · 3 need a look");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-a1", "sub-b2", "sub-c3"]);
@@ -282,7 +283,7 @@ describe("the dataset viewer's grid", () => {
     act(() => chip.click());
     await settle();
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&filter=look");
-    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=look&show=code&filter=look");
+    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=id&show=code&filter=look");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-a1"]);
     expect(el.querySelector(".vw-foot")?.textContent).toBe("1 of the 1 subject with scans to look at · Enter opens · / searches");
     expect(chip.getAttribute("aria-pressed")).toBe("true");
@@ -303,7 +304,7 @@ describe("the dataset viewer's grid", () => {
     await settle();
     // the search is held in memory, never in the address: what is typed can be an identifier
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid");
-    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=look&show=code&q=b2");
+    expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=id&show=code&q=b2");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-b2"]);
     // Esc in the search clears it first
     key("Escape");
@@ -399,8 +400,8 @@ describe("the dataset viewer's grid", () => {
     expect(first.querySelector(".vw-slices")?.textContent).toBe("176");
     expect(first.querySelector(".vw-scan-params")?.textContent).toBe("TE 2.3 TR 2300 TI 900 FA 8");
     expect(text(".vw-scan .vw-tag.look")).toEqual(["look"]);
-    // a card opens the browser at that scan
-    expect(first.getAttribute("href")).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s34&scan=11");
+    // a card opens that scan in the grid's own viewer
+    expect(first.getAttribute("href")).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34&scan=11");
     // the scouts unfold
     act(() => [...el.querySelectorAll<HTMLButtonElement>(".vw-folder-head")][2].click());
     expect(text(".vw-scan .vw-scan-name")).toContain("Localizer");
@@ -460,7 +461,7 @@ describe("the dataset viewer's grid", () => {
     expect(el.textContent).not.toContain("The first");
   });
 
-  it("opens the scan at the cursor in the browser on Enter, and moves between visits with Alt and the arrows", async () => {
+  it("opens the scan at the cursor in its own viewer on Enter, and moves between visits with Alt and the arrows", async () => {
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
     key("ArrowRight");
     act(() => {
@@ -468,8 +469,9 @@ describe("the dataset viewer's grid", () => {
     });
     key("Enter");
     await settle();
-    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s34&scan=12");
-    expect(el.querySelector(".dview")).not.toBeNull();
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34&scan=12");
+    expect(el.querySelector(".dview")).toBeNull();
+    expect(el.querySelector("[data-testid=viewer]")?.getAttribute("data-stack")).toBe("12");
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
     key("ArrowRight", { altKey: true });
     await settle();
@@ -533,7 +535,7 @@ describe("the dataset viewer's grid", () => {
 
   it("opens a cohort's members the same way", async () => {
     await open("#data/cohorts/ms/view");
-    expect(asked("/api/cohorts/ms/subjects")).toEqual(["/api/cohorts/ms/subjects?limit=60&order=look&show=code"]);
+    expect(asked("/api/cohorts/ms/subjects")).toEqual(["/api/cohorts/ms/subjects?limit=60&order=id&show=code"]);
     expect(text(".vw-crumbs a")).toEqual(["Cohorts"]);
     expect(el.querySelector(".vw-card")?.getAttribute("href")).toBe("#data/cohorts/ms/view?mode=grid&subject=1");
   });

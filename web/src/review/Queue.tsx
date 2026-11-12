@@ -21,7 +21,7 @@ import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { EvidenceLines } from "../campaigns/ReaderParts";
-import { stackReadingFor } from "../campaigns/readerDoors";
+import { readsStackWhy, stackReadingFor } from "../campaigns/readerDoors";
 import type { Reading } from "../campaigns/reader";
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { acts, batchOf, DISAGREES, heldBy, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
@@ -342,6 +342,9 @@ export function LookDialog({ caps, item, stack, onClose, onExplain, onDecide }: 
   const facts = Object.entries(ev).filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v));
   const level = typeof ev.level === "number" ? ev.level : null;
   const [reading, setReading] = useState<Reading | null>(null);
+  // 2026-11-12: read for the stack shown, and again when whether it is read changes, not whenever the shell read the
+  // capabilities again and handed on a new object, which took the reasons away and brought them back each time
+  const reads = caps !== undefined && readsStackWhy(caps);
   useEffect(() => {
     if (!caps) return;
     let alive = true;
@@ -350,7 +353,8 @@ export function LookDialog({ caps, item, stack, onClose, onExplain, onDecide }: 
     return () => {
       alive = false;
     };
-  }, [caps, stack]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the capabilities by what is read from them
+  }, [reads, stack]);
   const lines = reading && !reading.blind ? reading.lines : [];
   return (
     <Dialog

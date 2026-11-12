@@ -7,6 +7,7 @@
 // records; nothing is hand-built.
 
 import type { Capabilities } from "../capabilities";
+import { uptimeOf } from "../held";
 import type { IconName } from "../ui/Icon";
 import { keptRunning } from "./install";
 import type { AdmissionRecord } from "./kvasir";
@@ -116,7 +117,7 @@ export function releaseTitle(r: PartRelease): string {
 const SIGN_IN: Record<string, string> = { off: "no sign-in", local: "local sign-in", oidc: "single sign-on" };
 
 /** Every part this deployment runs, in the order the design lists them. */
-export function partRows(caps: Capabilities, install: Install | null, admissions: AdmissionRecord[] | null, built: string[]): PartRow[] {
+export function partRows(caps: Capabilities, install: Install | null, admissions: AdmissionRecord[] | null, built: string[], running: number | null = uptimeOf(caps)): PartRow[] {
   const unit = (part: string) => install?.services.find((s) => s.part === part) ?? null;
   const page = (id: string) => (built.includes(id) ? id : null);
   const release = install?.release ?? null;
@@ -146,7 +147,8 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
 
   const rows: PartRow[] = [];
   const engine = caps.engine;
-  const uptime = typeof engine?.["uptime_seconds"] === "number" ? (engine["uptime_seconds"] as number) : null;
+  // the shell hands on the uptime it read last; the capabilities keep the one they were first read with
+  const uptime = engine ? running : null;
   rows.push({
     id: "engine",
     title: "Engine",
