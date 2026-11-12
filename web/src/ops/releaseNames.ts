@@ -30,13 +30,21 @@ export interface NameType {
 }
 
 /**
+ * The ID types the form never offers as a name, whatever they keep: the study
+ * UID that stands in for a missing ID is no subject's ID, PatientID as a
+ * hospital wrote it is not a name a release carries out, and a subject code
+ * filed as an ID is the code of a subject merged into this one.
+ */
+export const NOT_A_NAME: readonly string[] = [FALLBACK_TYPE, "patient-id", "subject-code"];
+
+/**
  * The ID types a release may name its subjects by: those the engine says keep
- * at least one value. A type NILS never keeps a value of names nobody, the
- * study UID that stands in for a missing ID is no subject's ID, and a type
- * the engine counts no kept values for is not offered.
+ * at least one value, less the ones the form never offers. A type NILS never
+ * keeps a value of names nobody, and a type the engine counts no kept values
+ * for is not offered.
  */
 export function nameTypes(types: readonly IdType[]): NameType[] {
-  return types.filter((t) => !neverKept(t) && t.name !== FALLBACK_TYPE && typeof t.kept === "number" && t.kept > 0).map((t) => ({ name: t.name, label: idTypeWords(t.name) }));
+  return types.filter((t) => !neverKept(t) && !NOT_A_NAME.includes(t.name) && typeof t.kept === "number" && t.kept > 0).map((t) => ({ name: t.name, label: idTypeWords(t.name) }));
 }
 
 /** The list with one type moved a place earlier (-1) or later (1); unchanged at either end. */

@@ -334,6 +334,12 @@ describe("an engine without the setting", () => {
       { name: "pacs-id", label: "Pacs id" },
     ]);
   });
+
+  it("never offers PatientID as a hospital wrote it, a subject code filed as an ID, or the study UID, whatever they keep", () => {
+    const kept = (name: string) => ({ name, description: "", identifying: false, identifiers: 9, kept: 9 });
+    expect(nameTypes([kept("patient-id"), kept("subject-code"), kept("study-instance-uid"), kept("study-id")])).toEqual([{ name: "study-id", label: "Study ID" }]);
+    expect(nameTypes([kept("patient-id"), kept("subject-code")])).toEqual([]);
+  });
 });
 
 describe("the names in words", () => {
