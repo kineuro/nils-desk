@@ -66,6 +66,14 @@ export interface Cohort {
   parts?: Part[];
   /** Wave 7a (2026-10-09): the datasets holding scans of its members, with a dataset that feeds it; an older engine sends none. */
   datasets?: Holding[];
+  /**
+   * 2026-11-12: the engine keeps the list and answers it at once whatever its
+   * age. `counting` says this cohort's counts are the kept ones while they are
+   * gathered again apart, so the next answer may say more; `counts_as_of`
+   * when they were gathered. An engine before this sends neither.
+   */
+  counting?: boolean;
+  counts_as_of?: string | null;
 }
 
 /** One event of a cohort's membership log: who joined or left at once, what brought them, and what did it. */

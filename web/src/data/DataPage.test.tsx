@@ -20,10 +20,11 @@ import { next } from "../held";
 import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
 import { forgetData, LIST, sourcesKept, whoOf } from "./kept";
-import type { Dataset } from "./datasets";
+import { isCounted, type Dataset } from "./datasets";
 import { makingRefusal, nameRefusal } from "./NewCohort";
 import { STEP_RUN_DOORS } from "./stepRun";
-import { clock, type DatasetSummary, type SummaryStep } from "./summary";
+import { certainty, nextStep } from "./steps";
+import { cardLine, clock, railOf, stepsOfSources, type DatasetSummary, type SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -127,19 +128,19 @@ const NO_MODEL = { reason: "no_model", error: "no post-contrast model is install
 const aside = (d: Dataset) => (d.name === "study-big" ? 3 : 0);
 
 function summaryOf(d: Dataset, running = false): DatasetSummary {
-  const scans = d.totals.stacks;
+  const scans = d.totals!.stacks;
   return {
     dataset: d.name,
     dataset_id: d.id,
     detail: "sensitive",
     state: d.name === "ward-c" ? "unknown" : "anonymised",
     added_at: AT,
-    subjects: d.totals.subjects,
-    sessions: d.totals.sessions,
-    studies: d.totals.studies,
+    subjects: d.totals!.subjects,
+    sessions: d.totals!.sessions,
+    studies: d.totals!.studies,
     scans,
-    sure: d.totals.sure ?? 0,
-    need_a_look: d.totals.to_sort,
+    sure: d.totals!.sure ?? 0,
+    need_a_look: d.totals!.to_sort,
     unsorted: 0,
     look_kinds: {},
     kinds: scans > 0 ? [{ kind: "T1w", scans: 16 }, { kind: "FLAIR", scans: 8 }] : [],
@@ -149,8 +150,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
       bytes: 5_000_000,
       read: 120,
       // record 56 (2026-10-11): what the read set aside by policy is counted among the refused, by kind, and asks nobody anything
-      refused: d.totals.refused_files + aside(d),
-      refused_batch: d.totals.refused_files > 0 ? 30 : null,
+      refused: d.totals!.refused_files + aside(d),
+      refused_batch: d.totals!.refused_files > 0 ? 30 : null,
       set_aside: aside(d),
       set_aside_kinds: aside(d) > 0 ? [{ kind: "screen_capture", words: "screen captures", count: 2 }, { kind: "pdf", words: "PDFs", count: 1 }] : [],
       // Nima, 2026-10-12: two of the three are of a subject with no stack in the dataset, which it does not count
@@ -176,8 +177,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
           ]
         : [
             step("found", { files: 120, tree: "anon" }),
-            step("read", { job: 4, files: 120, refused: d.totals.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
-            step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
+            step("read", { job: 4, files: 120, refused: d.totals!.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
+            step("sorted", { job: 6, scans, of: scans, look: d.totals!.to_sort, unsorted: 0 }),
             step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
             step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [], refusal: NO_MODEL }),
             step("main_scans", { job: 8, picked: 28, borders: 2 }),
@@ -1238,6 +1239,161 @@ describe("the shell's reads of the capabilities (2026-11-12)", () => {
     await again(caps7a(DOORS, GRANTS));
     expect(lists(e).sort()).toEqual(["/api/cohorts", "/api/sources", "/api/sources"]);
     expect(host.querySelector(".dp-grid.cohorts")).not.toBeNull();
+  });
+});
+
+describe("lists the engine keeps and counts again apart (2026-11-12)", () => {
+  const reads = (e: { calls: Call[] }, path: string) => e.calls.filter((c) => c.method === "GET" && new URL(c.url, "http://x").pathname === path).length;
+  const isList = (c: Call, path: string) => c.method === "GET" && new URL(c.url, "http://x").pathname === path;
+  /** The three numbers of a dataset's card: files, subjects, scans. */
+  const nums = (name: string) => [...card(name).querySelectorAll(".dp-nums b")].map((b) => b.textContent);
+  /** A dataset asked at once before its first count: its place and dataset fields, and none of its counts. */
+  const uncounted = (name: string, id: number): Dataset => {
+    const d = { ...ds(name, id), counted: false, counting: true, counts_as_of: null, trees: { originals: null, anon: { path: `/srv/in/${name}/derivatives/dcm-anon`, files: null, last_written: null } } } as Dataset;
+    delete d.held;
+    delete d.digests;
+    delete d.totals;
+    return d;
+  };
+  const sourcesOf = (list: Dataset[], counting?: boolean) => ({ status: 200, body: { count: list.length, window_days: 30, sources: list, rates: null, ...(counting === undefined ? {} : { counting, counts_as_of: AT }) } });
+
+  it("asks the datasets at once, and follows neither list of an engine that says nothing of counting", async () => {
+    ownClock();
+    const e = await page();
+    expect(e.of("GET", "/api/sources?recent=12&at_once=1")).toHaveLength(1);
+    // its answer has none of the new words, and is drawn as before
+    expect(nums("study-big")).toEqual(["120", "12", "40"]);
+    expect(card("study-big").querySelector(".dp-line")?.textContent).toBe("32 sure · 8 need a look");
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([1, 1]);
+  }, CLOCKED);
+
+  it("reads the datasets again a while after each answer that says counting, until one says so no more", async () => {
+    ownClock();
+    const kept = { ...looked, counted: true, counting: true, counts_as_of: AT };
+    const fresh = { ...looked, totals: { ...looked.totals!, stacks: 44 }, counted: true, counting: false, counts_as_of: "2026-11-12T08:00:00Z" };
+    let asked = 0;
+    const e = await page({
+      list: [done, looked],
+      route: (c) => {
+        if (!isList(c, "/api/sources")) return undefined;
+        asked += 1;
+        return asked < 3 ? sourcesOf([done, kept], true) : sourcesOf([done, fresh], false);
+      },
+    });
+    // the kept counts at once
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([1, "40"]);
+    await after(5_000);
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([2, "40"]);
+    // the fresh ones land, and the list is followed no more
+    await after(5_000);
+    expect([reads(e, "/api/sources"), nums("study-big")[2]]).toEqual([3, "44"]);
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([3, 1]);
+  }, CLOCKED);
+
+  it("reads the cohorts again while one of them says counting, until none does", async () => {
+    ownClock();
+    let asked = 0;
+    const e = await page({
+      route: (c) => {
+        if (!isList(c, "/api/cohorts")) return undefined;
+        asked += 1;
+        return { status: 200, body: asked < 2 ? [{ ...cohorts[0], counting: true, counts_as_of: AT }, { ...cohorts[1], counting: false, counts_as_of: AT }] : [{ ...cohorts[0], subjects: 18, counting: false, counts_as_of: "2026-11-12T08:00:00Z" }, cohorts[1]] };
+      },
+    });
+    const big = () => host.querySelector(".dp-grid.cohorts .dp-card .dp-big b")?.textContent;
+    expect([reads(e, "/api/cohorts"), big()]).toEqual([1, "16"]);
+    await after(5_000);
+    expect([reads(e, "/api/cohorts"), big()]).toEqual([2, "18"]);
+    await after(60_000);
+    expect([reads(e, "/api/cohorts"), reads(e, "/api/sources")]).toEqual([2, 1]);
+  }, CLOCKED);
+
+  it("follows a list no more once the page has gone", async () => {
+    ownClock();
+    const e = await page({
+      list: [done, looked],
+      route: (c) => (isList(c, "/api/sources") ? sourcesOf([done, { ...looked, counted: true, counting: true, counts_as_of: AT }], true) : isList(c, "/api/cohorts") ? { status: 200, body: [{ ...cohorts[0], counting: true, counts_as_of: AT }] } : undefined),
+    });
+    await after(5_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([2, 2]);
+    act(() => root.unmount());
+    root = createRoot(host);
+    await after(60_000);
+    expect([reads(e, "/api/sources"), reads(e, "/api/cohorts")]).toEqual([2, 2]);
+  }, CLOCKED);
+
+  it("draws a dataset that came without its counts as being counted, never a zero, and takes its counts when they land", async () => {
+    ownClock();
+    let counted = false;
+    const e = await page({
+      list: [done, ds("ward-u", 12)],
+      query: { dataset: "ward-u" },
+      route: (c) => {
+        if (counted) return undefined;
+        if (isList(c, "/api/sources")) return sourcesOf([done, uncounted("ward-u", 12)], true);
+        if (isList(c, "/api/datasets/ward-u/summary")) return { status: 200, body: { dataset: "ward-u", counted: false, counting: true, count: { what: "files", place: "ward-u", done: 1200, since: AT } } };
+        return undefined;
+      },
+    });
+    const c = () => card("ward-u");
+    const d = () => host.querySelector<HTMLElement>(".dp-detail")!;
+    // its card stands with its name and what its structure says, and says the count
+    expect(c().querySelector(".dp-pick")?.textContent).toBe("ward-u");
+    expect(c().querySelector(".dp-card-head .tag")?.textContent).toBe("Ready");
+    expect(nums("ward-u")).toEqual(["?", "?", "?"]);
+    expect(c().querySelector(".dp-first")?.textContent).toBe("Counting files in ward-u: 1,200 so far");
+    expect([...c().querySelectorAll(".dp-rail span")].map((x) => x.className)).toEqual(Array(6).fill("unknown"));
+    // nothing to view is known of: View stands and opens nothing
+    expect(c().querySelector("a.dp-view")).toBeNull();
+    // its detail the same: no step offered on a guess, no count of nothing
+    expect(d().querySelector(".dp-detail-name")?.textContent).toBe("ward-u");
+    const primary = () => [...d().querySelectorAll<HTMLButtonElement>(".dp-acts button.button")].filter((b) => !b.classList.contains("secondary"));
+    expect(primary().map((b) => [b.textContent, b.disabled])).toEqual([["Counting", true]]);
+    expect(d().querySelector(".dp-first")?.textContent).toBe("Counting files in ward-u: 1,200 so far.");
+    expect(d().textContent).toContain("Not counted yet.");
+    const said = `${c().textContent} ${d().textContent}`;
+    for (const words of ["Not read yet", "Nothing read yet", "No scans found"]) expect(said).not.toContain(words);
+    expect(said).not.toMatch(/(^|\D)0 ?(files|subjects|visits|scans)/);
+    // the other dataset is drawn with its counts beside it
+    expect(nums("ward-f")).toEqual(["120", "12", "30"]);
+    // the list is read again a while after, and the counts land
+    counted = true;
+    await after(5_000);
+    expect(reads(e, "/api/sources")).toBe(2);
+    expect(nums("ward-u")).toEqual(["120", "12", "30"]);
+    expect(c().querySelector(".dp-first")).toBeNull();
+    expect(d().textContent).not.toContain("Not counted yet.");
+    expect(primary().map((b) => b.textContent)).not.toContain("Counting");
+    await after(60_000);
+    expect(reads(e, "/api/sources")).toBe(2);
+  }, CLOCKED);
+
+  it("says the count in the list's own words where no summary of the dataset is read", async () => {
+    await page({ doors: DOORS.filter((x) => x !== "GET /api/datasets/{name}/summary"), list: [uncounted("ward-u", 12)], query: { dataset: "ward-u" } });
+    expect(nums("ward-u")).toEqual(["?", "?", "?"]);
+    expect(card("ward-u").querySelector(".dp-line")?.textContent).toBe("Counting scans and files");
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.querySelector(".dp-first")?.textContent).toBe("Counting scans and files.");
+    expect(d.querySelectorAll(".dp-step")).toHaveLength(0);
+    expect(d.textContent).toContain("Not counted yet.");
+    for (const words of ["Not read yet", "Nothing read yet", "No scans found"]) expect(host.textContent).not.toContain(words);
+  });
+
+  it("says of a dataset without its counts only what its structure says", () => {
+    const u = uncounted("ward-u", 12);
+    expect([isCounted(u), isCounted(done)]).toEqual([false, true]);
+    expect(nextStep(u, null)).toEqual({ word: "Ready", step: "counting", label: "Counting", busy: true });
+    expect(railOf(u, null)).toEqual(Array(6).fill("unknown"));
+    expect(cardLine(u, nextStep(u, null), null)).toBe("Counting scans and files");
+    expect(certainty(u)).toBeNull();
+    expect(stepsOfSources(u)).toEqual([]);
+    // loose files are sorted into their folder first, counted or not
+    expect(nextStep({ ...u, arrives: "undeclared" }, null).step).toBe("sort-files");
+    // one being counted asks nobody anything: the first card chosen is one that does
+    expect(firstChoice([u, looked], () => null, [])).toEqual({ kind: "dataset", name: "study-big" });
+    expect(firstChoice([u], () => null, [])).toEqual({ kind: "dataset", name: "ward-u" });
   });
 });
 

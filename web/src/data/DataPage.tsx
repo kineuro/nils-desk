@@ -28,7 +28,7 @@ import { CohortDetail } from "./CohortDetail";
 import { cohorts as cohortDoors, type Cohort } from "./cohorts";
 import { cohortsKept, keepSummary, LIST, sourcesKept, summariesKept, takeData, whoOf } from "./kept";
 import { DatasetDetail } from "./DatasetDetail";
-import { jobs as jobsDoor, packFor, packPicks, sources, type Dataset, type Layout } from "./datasets";
+import { isCounted, jobs as jobsDoor, packFor, packPicks, sources, type Dataset, type Layout } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { NewCohortDialog, makingRefusal } from "./NewCohort";
@@ -104,7 +104,8 @@ export function chosenOf(dataset: string | null | undefined, query: Record<strin
 export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => string | null, cohortList: readonly Cohort[], sums: Readonly<Record<string, DatasetSummary>> = {}): Chosen {
   const needs = list.find((d) => {
     const s = nextStep(d, why(d), sums[d.name] ?? null);
-    return s.step !== "read-new" && s.step !== "running";
+    // one that runs or is being counted asks nobody anything
+    return s.step !== "read-new" && s.step !== "running" && s.step !== "counting";
   });
   const d = needs ?? list[0];
   if (d) return { kind: "dataset", name: d.name };
@@ -191,10 +192,12 @@ export function DataPage({
   // (a summary of 30 to 40 s was asked every 5 s, ten of them out at once), and an answer the page let go of never lands
   // 2026-11-12: an answer is kept as it comes, numbered by when its read was sent: one that comes after the page went
   // is there for the next visit, and a slow one from a visit before never lands over a newer one
+  // The datasets are asked at once: one never counted comes with its name and place and without its counts, and its
+  // card says it is being counted, where the whole list waited for that first count before.
   const sourceReads = useReads(
     () => {
       const sent = sourcesKept.sent();
-      return sources.list().then((r) => {
+      return sources.list(undefined, true).then((r) => {
         sourcesKept.land(who, LIST, sent, r.sources);
         return r;
       });
@@ -297,10 +300,16 @@ export function DataPage({
     readAgain();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
   }, [openKey]);
+  // 2026-11-12: the engine keeps each list's counts and answers them at once whatever their age, counting again apart.
+  // A list that says so (a dataset or a cohort `counting`, or a dataset not counted yet) is read again a while after
+  // each answer until it says so no more: a person saw the kept counts on arrival and never the fresh ones otherwise.
+  const listCounting = (listKept ?? []).some((d) => d.counting === true || d.counted === false);
+  const cohortsCounting = (cohortList ?? []).some((c) => c.counting === true);
   useEffect(() => {
-    sourceReads.follow(runningKey === "" ? [] : [LIST]);
+    sourceReads.follow(runningKey !== "" || listCounting ? [LIST] : []);
+    cohortReads.follow(cohortsCounting ? [LIST] : []);
     summaryReads.follow(followKey === "" ? [] : followKey.split("\n"));
-  }, [runningKey, followKey, sourceReads, summaryReads]);
+  }, [runningKey, listCounting, cohortsCounting, followKey, sourceReads, cohortReads, summaryReads]);
 
   // words about a dataset's run go once it is over: seen running and now not, or a step of it finished since the words were said
   useEffect(() => {
@@ -442,7 +451,7 @@ export function DataPage({
               on={chosenDataset?.id === d.id}
               relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
               feeds={feedsWords(d.name, d.cohort, allCohorts)}
-              view={viewOf({ kind: "dataset", name: d.name }, d.totals.stacks > 0)}
+              view={viewOf({ kind: "dataset", name: d.name }, (d.totals?.stacks ?? sums[d.name]?.scans ?? 0) > 0)}
               onPick={() => choose({ kind: "dataset", name: d.name })}
             />
           ))}
@@ -612,13 +621,17 @@ function DatasetCard(props: {
 }) {
   const { dataset: d, why, summary, reading, first, on, relation, feeds, view, onPick } = props;
   const next = nextStep(d, why, summary);
-  const found = foundOf(d, summary);
+  // 2026-11-12: listed before its first count, it has no number of its own: its summary's where that is read, else none, never a zero
+  const told = isCounted(d) || summary !== null;
+  const found = told ? foundOf(d, summary) : { files: null, partial: false };
   const files = found.files;
   // while its summary is on its way, what the sources door does not show is not known yet, never "not yet" (2026-10-17)
   const rail = railOf(d, summary, reading);
   const line = cardLine(d, next, summary);
   // what the scans that need a look are asked, behind a hover
-  const lookWords = kindWords(summary?.look_kinds ?? d.totals.need_a_look ?? {});
+  const lookWords = kindWords(summary?.look_kinds ?? d.totals?.need_a_look ?? {});
+  const subjects = d.totals?.subjects ?? summary?.subjects ?? null;
+  const scans = d.totals?.stacks ?? summary?.scans ?? null;
   const cls = ["dp-card", on ? "on" : relation ? (relation.related ? "rel" : "dim") : null].filter(Boolean).join(" ");
   const said = rail.map((s, i) => `${SEGMENT_WORDS[i]} ${segmentWords(s)}`).join(", ");
   return (
@@ -649,11 +662,11 @@ function DatasetCard(props: {
           <span>files</span>
         </span>
         <span>
-          <b>{n(d.totals.subjects)}</b>
+          <b>{subjects === null ? "?" : n(subjects)}</b>
           <span>subjects</span>
         </span>
         <span>
-          <b>{n(d.totals.stacks)}</b>
+          <b>{scans === null ? "?" : n(scans)}</b>
           <span>scans</span>
         </span>
       </div>

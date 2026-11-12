@@ -77,7 +77,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
   const dataset = batch ? datasetOf(batch, list) : null;
   // the same batch among the dataset's digests names the jobs of its thread by
   // stage, which the jobs table takes beside the ones the batch row names
-  const digest = dataset?.digests.recent.find((d) => d.id === id) ?? null;
+  const digest = dataset?.digests?.recent.find((d) => d.id === id) ?? null;
   const mine = batch ? jobsOfBatch(batch, jobs, chainJobs(digest?.chain)).sort((a, b) => a.id - b.id) : [];
   const classified = batch?.stages?.classified ?? null;
   const toSort = classified ? Math.max(0, classified.of - classified.stacks) : (digest?.to_sort ?? 0);

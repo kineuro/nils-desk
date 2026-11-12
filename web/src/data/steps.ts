@@ -9,6 +9,7 @@ import { door } from "../ask/client";
 import type { Place } from "../objects/client";
 import { newInOriginals, type Dataset, type DatasetFields, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
+import { isCounted, type Counted } from "./sources";
 import { asksHolds, countsOf } from "./pseudoStep";
 import type { DatasetSummary } from "./summary";
 
@@ -101,7 +102,7 @@ export function dicomWord(f: Pick<FolderLook, "holds_dicom">): string {
 export type StateWord = "Unknown" | "Anonymised" | "Identified" | "Ready";
 
 /** What the card's one button does. */
-export type StepId = "running" | "sort-files" | "set-ids" | "pseudonymise" | "read" | "read-again" | "sort" | "review" | "read-new";
+export type StepId = "running" | "counting" | "sort-files" | "set-ids" | "pseudonymise" | "read" | "read-again" | "sort" | "review" | "read-new";
 
 export interface NextStep {
   word: StateWord;
@@ -113,6 +114,7 @@ export interface NextStep {
 
 const LABEL: Record<StepId, string> = {
   running: "Running",
+  counting: "Counting",
   "sort-files": "Sort the files",
   "set-ids": "Set the IDs",
   pseudonymise: "Pseudonymise",
@@ -132,7 +134,7 @@ const LABEL: Record<StepId, string> = {
  * it.
  */
 export function readStopped(d: Pick<Dataset, "digests">, s: Pick<DatasetSummary, "steps"> | null = null): boolean {
-  const newest = d.digests.recent[0] ?? null;
+  const newest = d.digests?.recent[0] ?? null;
   if (newest?.state === "running") return false;
   const read = s?.steps.find((x) => x.step === "read") ?? null;
   return newest?.state === "cancelled" || newest?.state === "failed" || read?.state === "failed";
@@ -149,7 +151,7 @@ export function readStopped(d: Pick<Dataset, "digests">, s: Pick<DatasetSummary,
  * run finished is never said to wait on the sources door's numbers alone.
  * Before any run the trees say it as before.
  */
-function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null): boolean {
+function pseudonymiseWaits(d: Counted<Dataset>, s: Pick<DatasetSummary, "steps"> | null): boolean {
   const step = s?.steps.find((x) => x.step === "pseudonymised") ?? null;
   const found = s?.steps.find((x) => x.step === "found") ?? null;
   const held = typeof step?.held === "number" ? step.held : (d.held?.files ?? 0);
@@ -170,16 +172,21 @@ function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null):
  * says), what is ready is read, a read that stopped part way is read
  * again, and what is read is sorted. `why` is the reason it is not read,
  * where the places door gave one; `s` its summary, where read, whose
- * pseudonymised step says what a run of it left.
+ * pseudonymised step says what a run of it left. A dataset listed before its
+ * first count (2026-11-12) is asked what its structure alone asks; past
+ * that, what it holds is not known, and its step is the count, which nobody
+ * presses: no read is offered on a guess that nothing read it.
  */
 export function nextStep(d: Dataset, why: string | null = notReadOf(d), s: Pick<DatasetSummary, "steps"> | null = null): NextStep {
-  const running = d.digests.recent.some((b) => b.state === "running");
+  const running = d.digests?.recent.some((b) => b.state === "running") ?? false;
   const at = (word: StateWord, step: StepId): NextStep => ({ word, step: running ? "running" : step, label: LABEL[running ? "running" : step], busy: running });
   if (d.state === "unknown" || d.arrives === "undeclared") return at("Unknown", "sort-files");
   if (why !== null) return at("Anonymised", "set-ids");
   const identified = d.state === "identified" || d.state === "both" || (d.state === undefined && d.arrives === "identified");
   // no rule says what its PatientID holds: its step asks that first, whatever a run before it left
-  if (identified && (asksHolds(d) || pseudonymiseWaits(d, s))) return at("Identified", "pseudonymise");
+  if (identified && asksHolds(d)) return at("Identified", "pseudonymise");
+  if (!isCounted(d)) return { word: identified ? "Identified" : "Ready", step: "counting", label: LABEL.counting, busy: true };
+  if (identified && pseudonymiseWaits(d, s)) return at("Identified", "pseudonymise");
   if (d.digests.count === 0) return at("Ready", "read");
   // the newest read was cancelled or failed part way: its stacks are not all there to sort, and a read again skips what it read
   if (readStopped(d, s)) return at("Ready", "read-again");
@@ -208,9 +215,10 @@ export interface Certainty {
  * scans, or no read of it classified anything). The engine's totals split
  * the stacks as `sure + to_sort + unsorted`: what needs a look is `to_sort`,
  * never the unsorted. An engine without `sure` counts the stacks minus those
- * still to sort.
+ * still to sort. Null as well for a dataset listed before its first count.
  */
-export function certainty(d: Pick<Dataset, "totals" | "digests">): Certainty | null {
+export function certainty(d: Pick<Dataset, "totals" | "digests" | "counted">): Certainty | null {
+  if (!isCounted(d)) return null;
   const t = d.totals;
   if (t.stacks <= 0) return null;
   const recent = d.digests.recent;
