@@ -340,6 +340,12 @@ describe("an engine without the setting", () => {
     expect(nameTypes([kept("patient-id"), kept("subject-code"), kept("study-instance-uid"), kept("study-id")])).toEqual([{ name: "study-id", label: "Study ID" }]);
     expect(nameTypes([kept("patient-id"), kept("subject-code")])).toEqual([]);
   });
+
+  it("never offers a type whose IDs lead to a person, whatever it keeps", () => {
+    const kept = (name: string, identifying: boolean) => ({ name, description: "", identifying, identifiers: 9, kept: 9 });
+    expect(nameTypes([kept("hospital-id", true), kept("study-id", false)])).toEqual([{ name: "study-id", label: "Study ID" }]);
+    expect(nameTypes([kept("hospital-id", true)])).toEqual([]);
+  });
 });
 
 describe("the names in words", () => {
