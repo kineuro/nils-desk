@@ -505,7 +505,8 @@ export function cardStep(s: Step, logs = false): CardStep {
 function ranWords(r: Ran): { said: string; file: boolean } {
   const q = r.document !== null ? `Question ${r.document}` : "The question";
   if (r.held) return { said: `${q} ran. ${LIST_WORDS}`, file: false };
-  if (r.rows === null) return { said: r.handle !== null ? `${q} ran, kept as Result ${r.handle}.` : `${q} ran.`, file: r.handle !== null };
+  // one row is said as no number of rows: a count answers one row whatever it counted, and "1 subject row" read as one subject where the count was none (seen on a real answer, 2026-11-13)
+  if (r.rows === null || r.rows === 1) return { said: r.handle !== null ? `${q} ran, kept as Result ${r.handle}.` : `${q} ran.`, file: r.handle !== null };
   const rows = `${r.rows.toLocaleString("en-US")} ${r.grain ? `${r.grain} ` : ""}${r.rows === 1 ? "row" : "rows"}`;
   return { said: r.handle !== null ? `${q} ran: ${rows}, kept as Result ${r.handle}.` : `${q} ran: ${rows}.`, file: r.handle !== null && r.rows > 0 };
 }
