@@ -4,7 +4,7 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
-import { asOneChatPart, type ChangeKind, type ChartItem, type FileItem, type PlanItem } from "./events";
+import { asOneChatPart, type ChangeKind, type ChangeSeen, type ChangeState, type ChartItem, type FileItem, type PlanItem } from "./events";
 import { splitReasoning } from "./reasoning";
 import { toolWords } from "./steps";
 
@@ -99,7 +99,14 @@ export interface Change {
   sentence: string;
   lines: string[];
   turn: string;
+  /** What the person pressed on this page: what the card says where the assistant keeps no state of its own. */
   decided: null | "approved" | "declined";
+  /** Where the assistant says it stands, once read: at the change's door as the conversation opens, and from the decide door. */
+  state?: ChangeState;
+  /** What happened, in the assistant's one sentence, where it says so. */
+  outcome?: string | null;
+  /** A job plan: the plan it proposed, which the inbox lists; the two are one card. */
+  plan?: string;
   /** A rule change: the engine's proposal it is, and its pack where the agent named one (record 56). */
   proposal?: number;
   pack?: string;
@@ -268,6 +275,7 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
               lines: one.lines,
               turn: turnId,
               decided: null,
+              ...(one.ref.plan !== undefined ? { plan: one.ref.plan } : {}),
               ...(one.ref.proposal !== undefined ? { proposal: one.ref.proposal } : {}),
               ...(one.ref.pack !== undefined ? { pack: one.ref.pack } : {}),
             },
@@ -491,10 +499,11 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
     const before = previous.proposals.find((x) => x.document === p.document);
     return before ? { ...p, decided: before.decided } : p;
   });
-  // and decided changes too
+  // and decided changes too, with what the assistant said of them
   state.changes = state.changes.map((c) => {
     const before = previous.changes.find((x) => x.id === c.id);
-    return before?.decided ? { ...c, decided: before.decided } : c;
+    if (!before) return c;
+    return { ...c, ...(before.decided ? { decided: before.decided } : {}), ...(before.state !== undefined ? { state: before.state, outcome: before.outcome ?? null } : {}) };
   });
   // a turn still running is followed, and the ending of the turn before it is not shown meanwhile
   if (running.size > 0) return { ...state, busy: true, settled: null };
@@ -504,6 +513,23 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
   const last = h.settlements?.[h.settlements.length - 1];
   const error = settledError(last?.error);
   return { ...state, busy: false, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
+}
+
+/**
+ * A change as the assistant says it stands (2026-11-13): its state and what happened, read at the change's own
+ * door or answered by the decide door. Where the assistant said nothing (`seen` null, one that keeps no state),
+ * what the person just pressed stands, as before.
+ */
+export function withChange(state: PaneState, id: string, seen: ChangeSeen | null, pressed?: "approved" | "declined"): PaneState {
+  return {
+    ...state,
+    changes: state.changes.map((c) => {
+      if (c.id !== id) return c;
+      if (!seen) return pressed ? { ...c, decided: pressed } : c;
+      const decided = seen.state === "approved" || seen.state === "failed" ? "approved" : seen.state === "declined" ? "declined" : null;
+      return { ...c, decided, state: seen.state, outcome: seen.outcome };
+    }),
+  };
 }
 
 /** The decisions the assistant keeps for a conversation's proposals (the chat, slice 2): a reload shows what was accepted or disregarded, and a proposal made for another version reads as stale. */

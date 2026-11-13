@@ -4,7 +4,7 @@
 // proposals go back as feedback, and the desk pushes the person's token
 // itself, since a browser never holds one.
 
-import { parseSse } from "./events";
+import { asChangeSeen, type ChangeSeen, parseSse } from "./events";
 import type { Chunk, History } from "./parts";
 import type { PageContext } from "../ui/context";
 
@@ -127,7 +127,7 @@ export const assistant = {
     if (!r.ok) await fail(r);
     return (await r.json()) as Inbox;
   },
-  /** Section 9.3: a plan restated is confirmed once; the scheduler fires what is due. */
+  /** Section 9.3: a plan restated is confirmed once; the scheduler fires what is due. The answer is the plan, with the change whose card proposed it where the assistant settles the two together. */
   confirmPlan: async (id: string): Promise<Plan> => {
     const r = await fetch(`/assistant/plans/${encodeURIComponent(id)}/confirm`, { method: "POST", headers: H });
     if (!r.ok) await fail(r);
@@ -138,10 +138,27 @@ export const assistant = {
     const r = await fetch(`/assistant/plans/${encodeURIComponent(plan)}/proposals/${n}/decide`, { method: "POST", headers: H, body: JSON.stringify({ verdict }) });
     if (!r.ok) await fail(r);
   },
-  /** One chat: a change the agent proposed (sorting words, an identity merge, a job plan), approved or declined; the assistant applies it, never the model. */
-  decideChange: async (id: string, verdict: "approved" | "declined"): Promise<void> => {
+  /**
+   * One chat: a change the agent proposed (sorting words, an identity merge, a job plan), approved or declined; the
+   * assistant applies it, never the model. The answer is where the change stands now, null from an assistant that
+   * does not say; a refusal that says it (approved and not applied, nothing left to approve) throws it with its words.
+   */
+  decideChange: async (id: string, verdict: "approved" | "declined"): Promise<ChangeSeen | null> => {
     const r = await fetch(`/assistant/changes/${encodeURIComponent(id)}/decide`, { method: "POST", headers: H, body: JSON.stringify({ verdict }) });
+    if (!r.ok) {
+      const j = (await r.clone().json().catch(() => null)) as { error?: unknown; change?: unknown } | null;
+      const seen = asChangeSeen(j?.change);
+      if (seen) throw new ChangeRefused(seen, typeof j?.error === "string" ? j.error : `the assistant answered ${r.status}`);
+      await fail(r);
+    }
+    return asChangeSeen(await r.json().catch(() => null));
+  },
+  /** Where a change stands, as the assistant keeps it; null where it does not say, or keeps no such change of this person. */
+  change: async (id: string): Promise<ChangeSeen | null> => {
+    const r = await fetch(`/assistant/changes/${encodeURIComponent(id)}`);
+    if (r.status === 404) return null;
     if (!r.ok) await fail(r);
+    return asChangeSeen(await r.json().catch(() => null));
   },
   /** Section 9.1: standing grants, per person and per verb, revocable. */
   grants: async (all = false): Promise<Grants> => {
@@ -169,6 +186,16 @@ export interface FeedbackRow {
   why?: string;
   /** The document the person is on when deciding; the assistant refuses an accept whose base moved. */
   current?: number;
+}
+
+/** A decision the assistant refused or could not apply, with where the change stands after it. */
+export class ChangeRefused extends Error {
+  constructor(
+    readonly change: ChangeSeen,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 export class StaleProposal extends Error {
@@ -220,6 +247,8 @@ export interface Plan {
   confirmed_at?: string | number | null;
   steps: Step[];
   fired?: unknown[];
+  /** The change whose card proposed the plan, with where it stands: null for a plan no change proposed, absent from an assistant before 1.0.0-alpha.34. */
+  change?: { id?: unknown; state?: unknown; decided?: unknown; outcome?: unknown } | null;
 }
 
 export interface InboxJob {

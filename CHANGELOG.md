@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- A job plan the assistant proposes is one card in its conversation (2026-11-13). The assistant keeps such a proposal twice: as a change, decided at `POST /assistant/changes/{id}/decide`, and as a plan in the inbox, confirmed at `POST /assistant/plans/{id}/confirm`. The desk drew both, a card that said "waits for you" in the turn and a second card for the plan at the foot of the thread; a person approved the second, and the first went on waiting. The plan an approval names (`ref.plan`), or that names the change (`change.id` on the inbox's plan, assistant 1.0.0-alpha.34), is now drawn on the approval card alone. Once approved, the card lists the plan's steps as the inbox says them, where the second card listed them: waiting with the assistant's reason, queued, running, done or failed with the reason, each with its job's number, which opens the job's log for a person who reads logs. While a step is under way the plan is read again after 3, 6 and 12 seconds and then every 15, and the card stays when the plan is done, where the plan's own card left the page. A plan no approval card names keeps its own card, as before.
+- When a plan's question has run, its card says so and leads to the answer: `Question 30 ran: 1,204 subject rows, kept as Result 45.` with one link, **Download it on Exports**, read from the job's own row (`GET /api/jobs/{id}`). A list held back says that the rows are held back and offers no file, and a person who may not read the job sees the step done with its job's number. The card's tag reads **done** once every step is, and **failed** when one failed.
+
+### Fixed
+
+- An approval card says where its change stands, not what the page remembers. A decision was kept in the page's memory alone, so a change approved or declined showed "waits for you" and its three buttons again after a reload, and went on showing them after it was decided somewhere else. Each change of a conversation is now read at `GET /assistant/changes/{id}` when the conversation opens, the decide door's answer is used in place of what was pressed, and the confirm door's answer settles the card of the change that proposed the plan where the assistant says so. Only an open change has buttons. An approval the assistant could not apply reads **not applied** with the assistant's sentence, never approved; a change whose plan is no longer kept reads **expired**; and a decision refused with no word on the change has the change read again. A plan confirmed on a card of its own is read as approved though an assistant before 1.0.0-alpha.34 still calls its change open, and with an assistant that answers no state the card stands as the page left it, as before.
+
+No contract floor change: a change's `state` and `outcome`, a plan's `change` and the confirm answer's `change` are read where the assistant sends them, and an assistant before them is asked as before, with one read of each change's door beside.
+
 ## [1.0.0-beta.14] - 2026-11-12
 
 The fourteenth desk beta draws the Data page at once, gives the grid its own viewer and lists subjects in the order of what they are shown by.
