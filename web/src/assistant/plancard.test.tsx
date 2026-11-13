@@ -193,6 +193,17 @@ describe("a job plan and its change in a conversation", () => {
     expect(made.querySelector("a")).toBeNull();
   });
 
+  it("say a count's one row as no number of rows, since one row is not one subject", async () => {
+    await mount({
+      plans: () => [confirmedPlan({ state: "done", job: 357 }, { state: "done" })],
+      change: { status: 200, body: { state: "approved" } },
+      job: { status: 200, body: { ...JOB, result: { ...JOB.result, row_count: 1 } } },
+    });
+    const made = cards()[0].querySelector("p.meta")!;
+    expect(words(made)).toBe("Question 30 ran, kept as Result 45. Download it on Exports");
+    expect(made.querySelector("a")?.getAttribute("href")).toBe("#query/exports");
+  });
+
   it("still say the step is done, with its job, where the person may not read the job", async () => {
     await mount({ plans: () => [confirmedPlan({ state: "done", job: 357 }, { state: "done" })], change: { status: 200, body: { state: "approved" } }, job: { status: 403, body: { error: "needs pipelines:see" } } });
     expect(kind(cards()[0])).toBe("Plan done");
