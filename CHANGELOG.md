@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.15] - 2026-11-13
+
+The fifteenth desk beta shows a job plan the assistant proposes as one card: where its change stands as the assistant keeps it, its steps as they run, and what a finished question made.
+
 ### Changed
 
 - A job plan the assistant proposes is one card in its conversation (2026-11-13). The assistant keeps such a proposal twice: as a change, decided at `POST /assistant/changes/{id}/decide`, and as a plan in the inbox, confirmed at `POST /assistant/plans/{id}/confirm`. The desk drew both, a card that said "waits for you" in the turn and a second card for the plan at the foot of the thread; a person approved the second, and the first went on waiting. The plan an approval names (`ref.plan`), or that names the change (`change.id` on the inbox's plan, assistant 1.0.0-alpha.34), is now drawn on the approval card alone. Once approved, the card lists the plan's steps as the inbox says them, where the second card listed them: waiting with the assistant's reason, queued, running, done or failed with the reason, each with its job's number, which opens the job's log for a person who reads logs. While a step is under way the plan is read again after 3, 6 and 12 seconds and then every 15, and the card stays when the plan is done, where the plan's own card left the page. A plan no approval card names keeps its own card, as before.
