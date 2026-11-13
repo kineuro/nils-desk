@@ -98,11 +98,33 @@
 //   approval and clarification cards, and a job plan from the inbox (today's
 //   Confirm card) maps onto the approval card.
 //
+// WHERE A CHANGE STANDS (2026-11-13)
+//   A card is drawn from what the assistant keeps, never from what this page
+//   remembers. The desk reads each change of a conversation when it opens:
+//     GET /assistant/changes/<id>
+//       {state: "open" | "approved" | "declined" | "failed" | "expired",
+//        decided?: "approved" | "declined" | null, outcome?: string | null}
+//   and the decide door answers the same view (on a refusal, beside `error`,
+//   as `change`). Only an open change waits for the person. `outcome` is one
+//   sentence of what happened; an assistant before 1.0.0-alpha.34 sends none.
+//   A view with neither `state` nor `decided` says nothing, and the card
+//   then stands as the page left it.
+//   A job_plan's approval names its plan (`ref.plan`), and each plan of
+//   GET /assistant/inbox may carry `change: {id, state, outcome} | null`, the
+//   change whose card proposed it. The two are one proposal and one card: the
+//   approval card, which once approved lists the plan's steps as the inbox
+//   says them (waiting with the reason, queued, running, done with the job's
+//   number, failed with the reason). A plan no approval card names keeps a
+//   card of its own. The plan's confirm door answers the plan and, where the
+//   assistant settles them together, `change`.
+//
 // No part names an agent, a station or a phase; the desk shows none.
 
 import type { Capabilities } from "../capabilities";
-import type { Plan } from "./client";
+import { LIST_WORDS } from "../ask/held";
+import type { Plan, Step } from "./client";
 import { href } from "../routes";
+import { plainReason } from "./ladder";
 import type { Change, Proposal } from "./parts";
 import { stationOf, stationsServed } from "./stations";
 
@@ -121,6 +143,15 @@ export interface PlanItem {
 }
 
 export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge" | "identity_rule" | "rule_change";
+
+/** Where a change stands, as the assistant keeps it. Only an open one waits for the person. */
+export type ChangeState = "open" | "approved" | "declined" | "failed" | "expired";
+
+/** What the assistant says of a change: where it stands, and what happened in one sentence where it says so. */
+export interface ChangeSeen {
+  state: ChangeState;
+  outcome: string | null;
+}
 
 export type FileMedia = "text/csv" | "text/tab-separated-values" | "text/plain" | "application/json" | "text/markdown";
 
@@ -167,6 +198,7 @@ export type OneChatPart =
 
 const STATUSES: PlanStatus[] = ["pending", "running", "done", "failed", "skipped"];
 const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule", "rule_change"];
+const CHANGE_STATES: ChangeState[] = ["open", "approved", "declined", "failed", "expired"];
 const FILE_MEDIA: FileMedia[] = ["text/csv", "text/tab-separated-values", "text/plain", "application/json", "text/markdown"];
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -290,6 +322,53 @@ export function asOneChatPart(v: unknown): OneChatPart | null {
   }
 }
 
+/**
+ * A change as the assistant answers it, at its own door, from the decide door or on a plan of the inbox: its
+ * `state`, else the person's verdict (`decided`), and its `outcome`. Null where it says neither, as an assistant
+ * that keeps no state does: the card then stands as the page left it.
+ */
+export function asChangeSeen(v: unknown): ChangeSeen | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const state = CHANGE_STATES.includes(o.state as ChangeState) ? (o.state as ChangeState) : o.decided === "approved" || o.decided === "declined" ? o.decided : null;
+  if (state === null) return null;
+  return { state, outcome: isStr(o.outcome) && o.outcome.trim() ? o.outcome.trim() : null };
+}
+
+/** One step of an approved plan on its card: what it does, where it stands, its job, and why it waits or failed. */
+export interface CardStep {
+  n: number;
+  words: string;
+  /** Where it stands, in a word: waiting, queued, running, done, failed; asks you for a step only a person takes. */
+  state: string;
+  job: number | null;
+  /** The job's log, where the person reads logs. */
+  href: string | null;
+  /** Why it waits or failed, in the assistant's own words. */
+  reason: string | null;
+}
+
+/** What a stored question's job made, as the engine's job row says it: the kept result and its rows. */
+export interface Ran {
+  /** The stored question it ran, where the job's line names it. */
+  document: number | null;
+  handle: number | null;
+  /** The rows of the answer; null where the list is held back or the job did not say. */
+  rows: number | null;
+  grain: string | null;
+  /** The list is held back whole (a small list at plain): no length, no file. */
+  held: boolean;
+}
+
+/** The plan a change's card stands for, and what the page knows beside it. */
+export interface PlanSeen {
+  plan: Plan;
+  /** What each finished question's job made, by job, where the engine was asked. */
+  ran?: Record<number, Ran>;
+  /** Where the card may lead: a job's log, the kept results. */
+  links?: { logs?: boolean; exports?: boolean };
+}
+
 /** The one approval card, whatever asked for it: a query version, a job plan, sorting words, an identity merge or an identity rule. */
 export interface ApprovalCard {
   /** Unique among the cards a turn shows. */
@@ -304,14 +383,20 @@ export interface ApprovalCard {
   lines: string[];
   /** The lines are steps in order (a plan), numbered. */
   numbered: boolean;
-  state: "open" | "approved" | "declined" | "stale";
+  state: "open" | "approved" | "declined" | "stale" | "failed" | "expired";
   /** Why it cannot be decided here, when it is decided elsewhere. */
   elsewhere?: string;
   approve: string;
   decline: string;
-  /** What the card says once approved: approved, kept, recorded. */
+  /** What the card says once approved: approved, kept, recorded, done; and how it failed: not applied, failed. */
   done: string;
-  /** Where the person goes on once it is approved, when approving only records it (an identity rule is changed on its dataset's page). */
+  /** An approved plan's steps, each with where it stands now; drawn in place of the lines. */
+  steps?: CardStep[];
+  /** What happened, where the card's one word does not say it: why an approval was not applied, why nothing is left to approve. */
+  note?: { words: string; warn: boolean };
+  /** What an approved plan made, in a sentence: a finished question's rows and the result that keeps them. */
+  made?: string;
+  /** Where the person goes on once it is approved: an identity rule is changed on its dataset's page, a finished question's rows are saved from Exports. */
   next?: { href: string; words: string };
 }
 
@@ -360,20 +445,117 @@ export function cardOfProposal(p: Proposal, elsewhere?: string): ApprovalCard {
   };
 }
 
-/** A change the one agent proposed, on the approval card. */
-export function cardOfChange(c: Change): ApprovalCard {
-  return {
+/** A server's sentence as the card says it: a capital first, a full stop last. */
+function sentenceOf(words: string): string {
+  const w = words.trim();
+  if (w === "") return "";
+  return `${w.charAt(0).toUpperCase()}${w.slice(1)}${/[.!?]$/u.test(w) ? "" : "."}`;
+}
+
+/** The change a plan of the inbox says proposed it, where the assistant says so (its 1.0.0-alpha.34). */
+function changeOfPlan(p: Plan): { id: string; seen: ChangeSeen | null } | null {
+  const c = p.change;
+  return c && typeof c === "object" && isStr(c.id) ? { id: c.id, seen: asChangeSeen(c) } : null;
+}
+
+/**
+ * The plan a change's card stands for, among the conversation's plans: the one its approval names (`ref.plan`),
+ * or the one that names the change. One proposal is then one card.
+ */
+export function planOfChange(c: Pick<Change, "id" | "plan">, plans: Plan[]): Plan | null {
+  return plans.find((p) => (c.plan !== undefined && p.id === c.plan) || changeOfPlan(p)?.id === c.id) ?? null;
+}
+
+/** Whether a plan was confirmed, on either card. */
+const confirmed = (p: Plan): boolean => Boolean(p.confirmed_at) || p.state === "confirmed" || p.state === "done";
+
+/**
+ * Where a change stands and what happened. A job plan whose plan is confirmed is approved, on whichever card the
+ * person said so (an assistant before 1.0.0-alpha.34 leaves the change open, or declined, beside a plan confirmed
+ * on the Plans page). Else the assistant's word, read at the change's own door or on its plan in the inbox, and a
+ * word that it is settled is never taken back by an older "open". Where the assistant says nothing (it keeps no
+ * state), the card stands as the page left it.
+ */
+export function changeSeen(c: Change, plan?: Plan | null): ChangeSeen {
+  const onPlan = plan ? changeOfPlan(plan) : null;
+  const onIt = onPlan?.id === c.id ? onPlan.seen : null;
+  const told = [c.state, onIt?.state].filter((s): s is ChangeState => s !== undefined);
+  const outcome = c.outcome ?? onIt?.outcome ?? null;
+  if (c.change === "job_plan" && plan && confirmed(plan)) return { state: "approved", outcome };
+  const settled = told.find((s) => s !== "open");
+  if (settled) return { state: settled, outcome };
+  if (told.length > 0) return { state: "open", outcome: null };
+  return { state: c.decided ?? "open", outcome: null };
+}
+
+/** Why a step waits or failed, in the assistant's own words: "waiting" is not said twice. */
+function reasonOf(s: Pick<Step, "reason">): string | null {
+  const r = plainReason(s.reason ?? "").replace(/^waiting:\s*/u, "").trim();
+  return r === "" ? null : r;
+}
+
+/** A plan's step as its card lists it once the plan is approved. */
+export function cardStep(s: Step, logs = false): CardStep {
+  const job = typeof s.job === "number" && Number.isFinite(s.job) ? s.job : null;
+  const state = s.rung === 3 ? (s.decided === "accepted" ? "accepted" : s.decided === "rejected" ? "declined" : "asks you") : s.state;
+  return { n: s.n, words: s.words, state, job, href: job !== null && logs ? href("pipelines", "logs", String(job)) : null, reason: state === "waiting" || state === "failed" ? reasonOf(s) : null };
+}
+
+/** What a finished question's job made, in a sentence, and whether its rows can be saved. */
+function ranWords(r: Ran): { said: string; file: boolean } {
+  const q = r.document !== null ? `Question ${r.document}` : "The question";
+  if (r.held) return { said: `${q} ran. ${LIST_WORDS}`, file: false };
+  if (r.rows === null) return { said: r.handle !== null ? `${q} ran, kept as Result ${r.handle}.` : `${q} ran.`, file: r.handle !== null };
+  const rows = `${r.rows.toLocaleString("en-US")} ${r.grain ? `${r.grain} ` : ""}${r.rows === 1 ? "row" : "rows"}`;
+  return { said: r.handle !== null ? `${q} ran: ${rows}, kept as Result ${r.handle}.` : `${q} ran: ${rows}.`, file: r.handle !== null && r.rows > 0 };
+}
+
+/** The steps of an approved plan that ran a stored question to its end as a job. */
+export function ranSteps(p: Plan): (Step & { job: number })[] {
+  return p.steps.filter((s): s is Step & { job: number } => s.rung === 2 && s.verb === "run" && s.state === "done" && typeof s.job === "number");
+}
+
+/**
+ * A change the one agent proposed, on the approval card. A job plan's change is given its plan where the
+ * conversation has it (2026-11-13): once approved, the one card lists the plan's steps as they stand, says what a
+ * finished question made and leads to it, where a second card for the plan stood before.
+ */
+export function cardOfChange(c: Change, seen?: PlanSeen | null): ApprovalCard {
+  const plan = seen?.plan ?? null;
+  const { state, outcome } = changeSeen(c, plan);
+  const card: ApprovalCard = {
     key: `c${c.id}`,
     change: c.change,
     kind: CHANGE_KINDS[c.change],
     ...said(c.title, c.sentence, c.change),
     lines: c.lines,
     numbered: c.change === "job_plan",
-    state: c.decided ?? "open",
+    state,
     approve: "Approve",
     decline: "Not now",
-    done: c.change === "identity_rule" ? "recorded" : "approved",
+    done: state === "failed" ? "not applied" : c.change === "identity_rule" ? "recorded" : "approved",
     ...(c.change === "identity_rule" ? { next: ruleNext(c.lines) } : {}),
+  };
+  // approved by the person and not applied, or nothing left to approve: the assistant's sentence says which
+  if (state === "failed") return { ...card, next: undefined, note: { words: sentenceOf(outcome ?? "approved, and not applied"), warn: true } };
+  if (state === "expired") return { ...card, next: undefined, note: { words: sentenceOf(outcome ?? "the plan is no longer kept, so there is nothing left to approve"), warn: false } };
+  if (state !== "approved" || !plan || !confirmed(plan) || plan.steps.length === 0) return card;
+  // the approved plan, where a card of its own stood: its steps as they stand now
+  const steps = plan.steps.map((s) => cardStep(s, seen?.links?.logs === true));
+  const taken = plan.steps.filter((s) => s.rung === 2);
+  const failed = taken.some((s) => s.state === "failed");
+  const over = taken.length > 0 && taken.every((s) => s.state === "done");
+  const made = ranSteps(plan).flatMap((s) => {
+    const r = seen?.ran?.[s.job];
+    return r ? [ranWords(r)] : [];
+  });
+  return {
+    ...card,
+    steps,
+    state: failed ? "failed" : "approved",
+    done: failed ? "failed" : over ? "done" : "approved",
+    ...(made.length > 0 ? { made: made.map((m) => m.said).join(" ") } : {}),
+    ...(made.some((m) => m.file) && seen?.links?.exports ? { next: { href: href("query", "exports"), words: "Download it on Exports" } } : {}),
   };
 }
 

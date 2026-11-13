@@ -19,12 +19,16 @@ const STATE_TAG: Record<ApprovalCard["state"], { tone: string; words: (c: Approv
   approved: { tone: "tag ok", words: (c) => c.done },
   declined: { tone: "tag", words: () => "not now" },
   stale: { tone: "tag", words: () => "moved on" },
+  failed: { tone: "tag blocked", words: (c) => c.done },
+  expired: { tone: "tag", words: () => "expired" },
 };
 
 /**
  * A change waiting for the person: its kind, its line, its steps, and three
  * buttons. Change it hands the words back to the person, who says what to
- * change; a card decided elsewhere says where.
+ * change; a card decided elsewhere says where. Only an open card has
+ * buttons. An approved plan lists its steps as they stand, each with its
+ * job, and says what it made with one link to it (2026-11-13).
  */
 export function ApprovalCardView({ card, onDecide, onRevise }: { card: ApprovalCard; onDecide?: (verdict: "approved" | "declined") => void; onRevise?: () => void }) {
   const tag = STATE_TAG[card.state];
@@ -38,17 +42,32 @@ export function ApprovalCardView({ card, onDecide, onRevise }: { card: ApprovalC
         </div>
         <p className="approval-title">{card.title}</p>
         {card.sentence && <p className="approval-sentence">{card.sentence}</p>}
-        {card.lines.length > 0 && (
-          <List className="approval-lines">
-            {card.lines.map((l, i) => (
-              <li key={i}>{l}</li>
+        {card.steps ? (
+          <ol className="approval-lines">
+            {card.steps.map((s) => (
+              <li key={s.n} className={`plan-step ${s.state.replace(/\s+/gu, "-")}`}>
+                {s.words}: {s.state}
+                {s.job !== null && <>, {s.href ? <a href={s.href}>job {s.job}</a> : `job ${s.job}`}</>}
+                {s.reason && `: ${s.reason}`}
+              </li>
             ))}
-          </List>
+          </ol>
+        ) : (
+          card.lines.length > 0 && (
+            <List className="approval-lines">
+              {card.lines.map((l, i) => (
+                <li key={i}>{l}</li>
+              ))}
+            </List>
+          )
         )}
         {card.state === "open" && !onDecide && card.elsewhere && <p className="meta">{card.elsewhere}</p>}
-        {card.state === "approved" && card.next && (
+        {card.note && <p className={card.note.warn ? "warn" : "meta"}>{card.note.words}</p>}
+        {(card.state === "approved" || card.state === "failed") && (card.made || card.next) && (
           <p className="meta">
-            <a href={card.next.href}>{card.next.words}</a>
+            {card.made}
+            {card.made && card.next && " "}
+            {card.next && <a href={card.next.href}>{card.next.words}</a>}
           </p>
         )}
       </div>

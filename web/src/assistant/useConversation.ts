@@ -8,9 +8,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PageContext } from "../ui/context";
 import { type ChatContext, type ChatVersions, chats, chatsKept, type Rating } from "./chats";
-import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
-import { after, positionOf, type Position } from "./events";
-import { type Change, type Chunk, empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
+import { assistant, ChangeRefused, StaleProposal, type Delegation, type Plan } from "./client";
+import { after, asChangeSeen, positionOf, type Position } from "./events";
+import { type Change, type Chunk, empty, fromHistory, reduce, type PaneState, type Proposal, withChange, withStored } from "./parts";
 import { nothingYet, STARTING_AFTER_MS } from "./steps";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
@@ -26,6 +26,16 @@ const RECONNECT_MOST_MS = 30_000;
  * once the stream, read and caught up, brought nothing of it for this long.
  */
 export const PROBE_MS = 15_000;
+/**
+ * How soon an approved plan's steps are read again while one of them still waits, is queued or runs: after 3, 6
+ * and 12 seconds, then every 15, as often as the assistant itself looks at a step's job.
+ */
+export const PLAN_AGAIN_MS = [3_000, 6_000, 12_000, 15_000];
+
+/** Whether a plan is confirmed and has a step the assistant has yet to take or still follows. */
+export function planGoing(p: Plan): boolean {
+  return p.state === "confirmed" && p.steps.some((s) => s.rung === 2 && (s.state === "waiting" || s.state === "queued" || s.state === "running"));
+}
 
 /** A pause that ends early when the follow is stopped. */
 function pauseFor(ms: number, signal: AbortSignal): Promise<void> {
@@ -55,6 +65,7 @@ export interface Beside {
 
 export interface Conversing {
   pane: PaneState;
+  /** The conversation's plans as the inbox lists them, the finished ones too: a change's card shows its plan to the end. */
   plans: Plan[];
   /** When the running turn started, for the wait's clock. */
   since: number;
@@ -116,12 +127,53 @@ export function useConversation(station: string, conv: string | null): Conversin
     setPane(current.current);
   }, []);
 
+  // the conversation's plans, the finished ones too; a read that fails leaves the plans the page has
   const readPlans = useCallback((id: string) => {
-    assistant
-      .inbox()
-      .then((i) => setPlans(i.plans.filter((p) => p.conversation === id && p.state !== "done")))
-      .catch(() => setPlans([]));
+    const mine = generation.current;
+    return assistant.inbox().then(
+      (i) => {
+        if (generation.current === mine) setPlans(i.plans.filter((p) => p.conversation === id));
+      },
+      () => undefined,
+    );
   }, []);
+
+  // where each change stands, as the assistant keeps it (2026-11-13): a card never says "waits for you" from this page's memory alone
+  const readChanges = useCallback(
+    (changes: Change[]) => {
+      const mine = generation.current;
+      for (const c of changes) {
+        // a rule change is the engine's proposal, read on its own card
+        if (c.change === "rule_change") continue;
+        assistant.change(c.id).then(
+          (seen) => {
+            if (seen && generation.current === mine) apply((s) => withChange(s, c.id, seen));
+          },
+          () => undefined,
+        );
+      }
+    },
+    [apply],
+  );
+
+  // an approved plan is read again while a step of it waits, is queued or runs, so its card shows the step as it stands
+  const going = plans.some(planGoing);
+  const again = useRef(0);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (!conv || !going) {
+      again.current = 0;
+      return;
+    }
+    const t = setTimeout(
+      () => {
+        again.current += 1;
+        void readPlans(conv).then(() => setRound((n) => n + 1));
+      },
+      PLAN_AGAIN_MS[Math.min(again.current, PLAN_AGAIN_MS.length - 1)],
+    );
+    return () => clearTimeout(t);
+  }, [conv, going, round, readPlans]);
 
   // what follows the stream once a turn settled: the plans, the list's order, the context and the name
   const settledTurn = useCallback(
@@ -261,7 +313,8 @@ export function useConversation(station: string, conv: string | null): Conversin
             setSince(Date.now());
             follow(conv, s.offset, guard && !guard.busy ? guard : null);
           }
-          readPlans(conv);
+          void readPlans(conv);
+          readChanges(s.changes);
           // words waiting for this conversation to open: a version just made, sent into once its history is read
           const q = queued.current;
           if (q && q.id === conv && !s.busy) {
@@ -297,7 +350,7 @@ export function useConversation(station: string, conv: string | null): Conversin
       clearInterval(t);
       reader.current?.abort();
     };
-  }, [conv, station, apply, follow, readPlans]);
+  }, [conv, station, apply, follow, readPlans, readChanges]);
 
   const reset = useCallback(() => {
     generation.current += 1;
@@ -353,17 +406,48 @@ export function useConversation(station: string, conv: string | null): Conversin
   };
 
   const confirm = (p: Plan) => {
+    const mine = generation.current;
     assistant
       .confirmPlan(p.id)
-      .then((done) => setPlans((all) => all.map((x) => (x.id === done.id ? done : x))))
+      .then((done) => {
+        if (generation.current !== mine) return;
+        // the plan as confirmed, in its conversation whatever the answer leaves out
+        setPlans((all) => all.map((x) => (x.id === done.id ? { ...x, ...done } : x)));
+        // the change whose card proposed it is settled with it, where the assistant says so
+        const settled = done.change;
+        const seen = asChangeSeen(settled);
+        if (seen && typeof settled?.id === "string") apply((s) => withChange(s, settled.id as string, seen));
+      })
       .catch((e: Error) => setWhy(e.message));
   };
 
   const decideChange = (c: Change, verdict: "approved" | "declined") => {
+    const mine = generation.current;
+    // the card says what the assistant answered, and the plan it stands for is read again: its steps are the card's from here
+    const settled = () => {
+      if (!conv || generation.current !== mine) return;
+      again.current = 0;
+      void readPlans(conv);
+    };
     assistant
       .decideChange(c.id, verdict)
-      .then(() => apply((s) => ({ ...s, changes: s.changes.map((x) => (x.id === c.id ? { ...x, decided: verdict } : x)) })))
-      .catch((e: Error) => setWhy(e.message));
+      .then((seen) => {
+        apply((s) => withChange(s, c.id, seen, verdict));
+        settled();
+      })
+      .catch((e: Error) => {
+        // a refusal that says where the change stands is told on its card; its words are said beside unless the card's own sentence says them (approved and not applied, nothing left to approve)
+        if (e instanceof ChangeRefused) {
+          const { state, outcome } = e.change;
+          apply((s) => withChange(s, c.id, e.change));
+          if (!(outcome && (state === "failed" || state === "expired"))) setWhy(e.message);
+          settled();
+          return;
+        }
+        setWhy(e.message);
+        // any other refusal: the change is read again, since it may have been decided elsewhere
+        readChanges([c]);
+      });
   };
 
   const sendWhenOpen = (id: string, words: string, beside: Beside = {}) => {

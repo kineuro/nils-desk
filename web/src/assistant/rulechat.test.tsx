@@ -99,7 +99,9 @@ describe("a rule change in the one chat", () => {
     act(() => button(card, "Adopt")!.click());
     await settle(6);
     expect(e.of("POST", "/api/packs/mri/proposals/13/decide")[0].body).toEqual({ decision: "adopt" });
-    expect(e.calls.filter((c) => c.url.startsWith("/assistant/changes/"))).toHaveLength(0);
+    // nothing of the rule change goes to the assistant, and nothing is decided there; the page reads where the conversation's other change stands
+    expect(e.calls.filter((c) => c.url.startsWith("/assistant/changes/r5"))).toHaveLength(0);
+    expect(e.calls.filter((c) => c.method !== "GET" && c.url.startsWith("/assistant/changes/"))).toHaveLength(0);
     expect(host.querySelector(".rule-card .approval-kind .tag")?.textContent).toBe("adopted");
   });
 

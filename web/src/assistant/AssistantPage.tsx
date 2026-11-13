@@ -6,6 +6,7 @@
 // and one agent, whatever the person wants; one live line while a turn works,
 // the steps behind a "?", the plan while several steps run, every change on
 // the one approval card and every question on the one clarification card.
+// A job plan and its change are one card (2026-11-13, PlanCard.tsx).
 // Another page may hand it a sentence to start from. The conversation loop
 // itself is useConversation, which a Query card's discussion holds too. The
 // thread (the chat, slice 4): answers in markdown; a message edited, or an
@@ -52,7 +53,8 @@ import { plansOffered } from "../ops/PlanPage";
 import { PLAN_STATION } from "../ops/runs";
 import { ApprovalCardView, PlanPanel, StatusLine } from "./Cards";
 import { RuleApprovalById } from "../review/RuleApproval";
-import { agentFor, cardOfPlan, planShown } from "./events";
+import { agentFor, cardOfPlan, planOfChange, planShown } from "./events";
+import { ChangeCard } from "./PlanCard";
 import { liveLine } from "./steps";
 import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
 import { TurnView } from "./TurnView";
@@ -441,6 +443,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     />
   );
   const about = meta?.document ?? null;
+  // one proposal, one card (2026-11-13): a plan that a change's approval card stands for is drawn on that card, never on one of its own
+  const carded = new Set(pane.changes.flatMap((c) => planOfChange(c, talk.plans)?.id ?? []));
   // the latest answer keeps its actions in sight; an earlier one shows them on hover
   const latest = [...pane.turns].reverse().find((t) => t.role === "assistant")?.id ?? null;
   return (
@@ -544,6 +548,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
                 queryCard={(p) => queryCard(p.document, stateOf(p, play.kept(p.document)))}
                 changes={pane.changes.filter((c) => c.turn === t.id)}
                 ruleCard={(c) => (c.proposal !== undefined ? <RuleApprovalById caps={caps} pack={c.pack ?? null} id={c.proposal} onChange={revise} /> : null)}
+                changeCard={(c) => <ChangeCard change={c} plan={planOfChange(c, talk.plans)} caps={caps} onDecide={(v) => talk.decideChange(c, v)} onRevise={revise} />}
                 charts={pane.charts[t.id]}
                 files={pane.files[t.id]}
                 onChange={talk.decideChange}
@@ -594,7 +599,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             {planShown(pane.plan) && <PlanPanel items={pane.plan} />}
             {status && <StatusLine words={status} />}
             {talk.plans
-              .filter((p) => !aside.has(p.id))
+              .filter((p) => p.state !== "done" && !carded.has(p.id) && !aside.has(p.id))
               .map((p) => (
                 <ApprovalCardView
                   key={p.id}
