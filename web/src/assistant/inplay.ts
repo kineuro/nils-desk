@@ -83,6 +83,11 @@ export interface FunnelStep {
   before: number | null;
   /** What the answer counts. */
   answer: boolean;
+  /**
+   * The step says whose rows the step before it holds, and is no narrowing of it: an answer of another grain (groups,
+   * events) comes first and its subjects after, read "7 groups of 5 subjects". Drawn with "of", never an arrow.
+   */
+  of?: boolean;
 }
 
 /** A count of the profile: a number, null where held back, undefined where the profile has none. */
@@ -109,8 +114,15 @@ export function funnelOf(p: Profile | null, before: Profile | null = null): Funn
     const before = n !== null && typeof was === "number" && was !== n ? was : null;
     steps.push({ grain, word, hint: word === `${grain}s` ? null : grain, n, before, answer: grain === p.grain });
   };
+  // An answer of another grain than subjects, visits and scans (groups, events) is no step of that funnel: its rows
+  // come first, and the subjects under them after, as whose they are. Drawn after the subjects with an arrow, seven
+  // groups of five subjects read as subjects narrowed to groups (2026-11-14). Where the rows have no subject
+  // (groups of cohorts) the engine sends none, and the rows stand alone.
+  const other = !LEVELS.some((l) => l.grain === p.grain);
+  if (other) push(p.grain, countIn(p.counts, "rows"), countIn(before?.counts, "rows"));
+  const first = steps.length;
   for (const l of LEVELS) push(l.grain, countIn(p.counts, l.key), countIn(before?.counts, l.key));
-  if (!LEVELS.some((l) => l.grain === p.grain)) push(p.grain, countIn(p.counts, "rows"), countIn(before?.counts, "rows"));
+  if (other && first === 1 && steps.length > 1) steps[1].of = true;
   return steps;
 }
 

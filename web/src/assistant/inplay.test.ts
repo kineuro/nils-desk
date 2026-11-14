@@ -68,10 +68,20 @@ describe("an answer's funnel", () => {
   });
 
   it("counts an answer of another grain by its rows, and draws nothing it was refused", () => {
-    expect(funnelOf(profile({ rows: 9, subjects: 4 }, "event")).map((s) => [s.word, s.n, s.answer])).toEqual([
-      ["subjects", 4, false],
-      ["events", 9, true],
+    // the answer's rows first, and the subjects under them as whose they are, never as a step that narrowed to them
+    expect(funnelOf(profile({ rows: 9, subjects: 4 }, "event")).map((s) => [s.word, s.n, s.answer, s.of ?? false])).toEqual([
+      ["events", 9, true, false],
+      ["subjects", 4, false, true],
     ]);
+    // groups of more groups than subjects: seven groups of five subjects, not five subjects narrowed to seven groups
+    expect(funnelOf(profile({ rows: 7, subjects: 5 }, "group")).map((s) => [s.grain, s.n, s.of ?? false])).toEqual([
+      ["group", 7, false],
+      ["subject", 5, true],
+    ]);
+    // rows with no subject under them (groups of cohorts): the engine sends no subjects, and the rows stand alone
+    expect(funnelOf(profile({ rows: 3 }, "group")).map((s) => [s.grain, s.n])).toEqual([["group", 3]]);
+    // an answer of subjects, visits or scans keeps its funnel, with no "of"
+    expect(funnelOf(profile({ subjects: 48, sessions: 61, stacks: 212 })).some((s) => s.of)).toBe(false);
     expect(funnelOf(profile({ refused: "no" }))).toEqual([]);
     expect(funnelOf(null)).toEqual([]);
   });

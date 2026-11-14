@@ -88,6 +88,7 @@
 .qstep b { font-weight: 600; }
 .qstep.on { border-color: var(--n-brand-line); background: var(--n-brand-soft); }
 .qstep-hint { color: var(--n-text-faint); font-size: 12px; }
+.qstep-of { color: var(--n-text-faint); font-size: 12px; }
 .qfunnel.qsteps .qstep { padding: 4px 10px; background: var(--n-bg-raised); cursor: pointer; }
 .qfunnel.qsteps .qstep.on { background: var(--n-brand-soft); }
 .qfunnel.qsteps .qstep:not(.on):not(:disabled):hover { background: var(--n-bg-hover); }

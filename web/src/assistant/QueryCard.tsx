@@ -76,7 +76,7 @@ export function FunnelChips({ steps }: { steps: FunnelStep[] }) {
     <div className="qfunnel" aria-label="The answer, step by step">
       {steps.map((s, i) => (
         <Fragment key={s.grain}>
-          {i > 0 && <Icon name="arrow" />}
+          {i > 0 && (s.of ? <span className="qstep-of">of</span> : <Icon name="arrow" />)}
           <span className={s.answer ? "qstep on" : "qstep"}>
             <b>{s.word}</b>
             {s.hint && <span className="qstep-hint">{s.hint}</span>}
