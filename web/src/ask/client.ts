@@ -187,7 +187,7 @@ export interface Profile {
   set: string;
   grain: string;
   /** Null where held back (record 55 K7, small counts at plain). */
-  counts: { subjects: number | null; sessions: number | null; stacks: number | null } | { rows: number | null; subjects: number | null } | Refused;
+  counts: { subjects: number | null; sessions: number | null; stacks: number | null } | { rows: number | null; subjects?: number | null } | Refused;
   stack_types: ProfileValue[] | Refused | null;
   field: { name: string; values?: ProfileValue[]; truncated?: boolean; refused?: string; withheld?: string } | null;
   demographics: { sex: ProfileValue[] | Refused; age_decades: ProfileValue[] | Refused } | { withheld: string } | null;

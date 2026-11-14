@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- A grouped answer reads as its groups and whose they are. The count chips of a query card and of the query panel drew an answer of another grain than subjects, visits and scans (groups, events) after its subjects with an arrow, `subjects 5 → groups 7`, which reads as five subjects narrowed to seven groups. The answer's own rows now come first and the subjects under them after, joined by "of": `groups 7 of subjects 5`. Where the rows have no subject under them (groups of cohorts) the engine sends no subjects and the rows stand alone. An answer of subjects, visits or scans keeps its funnel as it was. This goes with the engine change that counts the distinct subjects under a group set, where it answered the number of groups twice.
+
 ## [1.0.0-beta.15] - 2026-11-13
 
 The fifteenth desk beta shows a job plan the assistant proposes as one card: where its change stands as the assistant keeps it, its steps as they run, and what a finished question made.

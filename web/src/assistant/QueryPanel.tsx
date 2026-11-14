@@ -202,7 +202,7 @@ export function QueryPanel({ play, caps, keeping, epoch, onClose }: { play: Play
               const was = beforeWords(s);
               return (
                 <Fragment key={s.grain}>
-                  {i > 0 && <Icon name="arrow" />}
+                  {i > 0 && (s.of ? <span className="qstep-of">of</span> : <Icon name="arrow" />)}
                   <button
                     type="button"
                     className={s.grain === chosen ? "qstep on" : "qstep"}
